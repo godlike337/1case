@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from passlib.context import CryptContext
 from jose import JWTError, jwt
-
+from typing import Optional
 from database import get_db
 from models import User
 from schemas import UserCreate, UserResponse, Token
@@ -13,6 +13,8 @@ from schemas import UserCreate, UserResponse, Token
 SECRET_KEY = "secret_key"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 240
+ADMIN_USERNAME = "huesos"
+ADMIN_PASSWORD = "pidor123456"
 #роутер
 router = APIRouter(tags=["auth"])
 #безопастность
@@ -52,6 +54,29 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
         raise credentials_exception
     return user
 
+#проверка админа
+async def get_current_admin_user(current_user: User = Depends(get_current_user)):
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Недостаточно прав. Только для администраторов.",
+        )
+    return current_user
+#создание админки
+async def create_initial_admin_user(db: AsyncSession):
+    result = await db.execute(select(User).where(User.username == ADMIN_USERNAME))
+    admin_user = result.scalar_one_or_none()
+
+    if not admin_user:
+        hashed_password = get_password_hash(ADMIN_PASSWORD)
+        new_admin = User(username=ADMIN_USERNAME, password=hashed_password, role="admin")
+        db.add(new_admin)
+        await db.commit()
+        await db.refresh(new_admin)
+        print(f"--- Создан первый администратор: {ADMIN_USERNAME} с паролем: {ADMIN_PASSWORD} ---")
+        print("--- !!! ОБЯЗАТЕЛЬНО ПОМЕНЯЙТЕ ЕГО В auth.py !!! ---")
+    else:
+        print(f"--- Администратор {ADMIN_USERNAME} уже существует ---")
 
 #эндпоиты
 
@@ -92,3 +117,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
 @router.get("/users/me", response_model=UserResponse)
 async def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
+#админ ручка
+@router.get("/admin_test", dependencies=[Depends(get_current_admin_user)])
+async def admin_test():
+    return {"message": "Вы вошли как администратор!"}

@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
-
+from sqladmin import Admin
+from Admin_panel import UserAdmin, TaskAdmin
 from database import engine, Base
 import auth
 import tasks
@@ -19,3 +20,8 @@ def root():
     return {"message": "оно работает аухеть!"}
 app.include_router(auth.router)
 app.include_router(tasks.router)
+
+
+admin = Admin(app, engine)
+admin.add_view(UserAdmin)
+admin.add_view(TaskAdmin)
