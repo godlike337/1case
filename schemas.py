@@ -19,3 +19,21 @@ class UserResponse(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+class TaskCreate(BaseModel):
+    title: str
+    description: str
+    difficulty: int
+    correct_answer: str
+
+class TaskResponse(BaseModel):
+    id: int
+    title: str
+    description: str
+    difficulty: int
+
+    class Config:
+        from_attributes = True
+
+class TaskAttempt(BaseModel):
+    user_answer: str
