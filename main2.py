@@ -1,27 +1,27 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
+
 from sqladmin import Admin
-from Admin_panel import UserAdmin, TaskAdmin
-from database import engine, Base
+from database import engine, Base, get_db
 import auth
 import tasks
+from admin_panel import UserAdmin, TaskAdmin
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     print("--- БАЗА ДАННЫХ ПОДКЛЮЧЕНА ---")
+    async for db_session in get_db():
+        await auth.create_initial_admin_user(db_session)
+        break
     yield
 
-app = FastAPI(lifespan=lifespan, title="платформа для умных")
-app.include_router(auth.router)
 
-@app.get("/")
-def root():
-    return {"message": "оно работает аухеть!"}
-app.include_router(auth.router)
-app.include_router(tasks.router)
+app = FastAPI(lifespan=lifespan, title="Платформа для олимпиад")
+admin = Admin(app, engine, title="Админ-панель (Dev Mode)")
 
-
-admin = Admin(app, engine)
 admin.add_view(UserAdmin)
 admin.add_view(TaskAdmin)
+
+app.include_router(auth.router)
+app.include_router(tasks.router)

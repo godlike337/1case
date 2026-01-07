@@ -1,11 +1,11 @@
 from datetime import datetime, timedelta
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from passlib.context import CryptContext
 from jose import JWTError, jwt
-from typing import Optional
 from database import get_db
 from models import User
 from schemas import UserCreate, UserResponse, Token
@@ -74,7 +74,6 @@ async def create_initial_admin_user(db: AsyncSession):
         await db.commit()
         await db.refresh(new_admin)
         print(f"--- Создан первый администратор: {ADMIN_USERNAME} с паролем: {ADMIN_PASSWORD} ---")
-        print("--- !!! ОБЯЗАТЕЛЬНО ПОМЕНЯЙТЕ ЕГО В auth.py !!! ---")
     else:
         print(f"--- Администратор {ADMIN_USERNAME} уже существует ---")
 
