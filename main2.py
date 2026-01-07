@@ -5,6 +5,7 @@ from sqladmin import Admin
 from database import engine, Base, get_db
 import auth
 import tasks
+import pvp
 from admin_panel import UserAdmin, TaskAdmin
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -25,3 +26,4 @@ admin.add_view(TaskAdmin)
 
 app.include_router(auth.router)
 app.include_router(tasks.router)
+app.include_router(pvp.router)

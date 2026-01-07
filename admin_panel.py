@@ -1,15 +1,13 @@
 from sqladmin import ModelView
-from models import User, Task
+from models import User, Task, MatchHistory
 
 # Настройка отображения Пользователей
 class UserAdmin(ModelView, model=User):
-    column_list = [User.id, User.username, User.password]
-    column_searchable_list = [User.username]
-    column_details_exclude_list = [User.password]
-    form_columns = [User.username, User.role]
     name = "Пользователь"
     name_plural = "Пользователи"
     icon = "fa-solid fa-user"
+    column_list = [User.id, User.username, User.role, User.rating, User.wins]
+    form_columns = [User.username, User.role, User.rating]
 
 # Настройка отображения Задач
 class TaskAdmin(ModelView, model=Task):
