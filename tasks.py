@@ -10,28 +10,19 @@ from auth import get_current_user
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
-@router.post("/", response_model=TaskResponse)
-async def create_task(
-        task: TaskCreate,
+@router.get("/", response_model=list[TaskResponse])
+async def get_tasks(
+        subject: str = None,
         db: AsyncSession = Depends(get_db),
         current_user: User = Depends(get_current_user)
 ):
-    new_task = Task(
-        title=task.title,
-        description=task.description,
-        difficulty=task.difficulty,
-        correct_answer=task.correct_answer
-    )
-    db.add(new_task)
-    await db.commit()
-    await db.refresh(new_task)
-    return new_task
+    query = select(Task)
+    if subject:
+        query = query.where(Task.subject == subject)
 
-
-@router.get("/", response_model=list[TaskResponse])
-async def get_tasks(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Task))
+    result = await db.execute(query)
     return result.scalars().all()
+
 
 
 @router.post("/{task_id}/solve")
@@ -47,9 +38,11 @@ async def solve_task(
     if not task:
         raise HTTPException(status_code=404, detail="Задача не найдена")
 
-    is_correct = attempt.user_answer.strip().lower() == task.correct_answer.strip().lower()
 
-    if is_correct:
-        return {"status": "correct", "message": "Верно! +10 очков"}
+    user_ans = attempt.user_answer.strip().lower()
+    correct_ans = task.correct_answer.strip().lower()
+
+    if user_ans == correct_ans:
+        return {"status": "correct", "message": "Верно!"}
     else:
-        return {"status": "wrong", "message": "Неверно, попробуйте еще раз"}
+        return {"status": "wrong", "message": "Неверно"}

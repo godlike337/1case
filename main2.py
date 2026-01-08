@@ -9,7 +9,8 @@ import auth
 import tasks
 import pvp # Не забудь, если еще нет
 from admin_panel import UserAdmin, TaskAdmin, MatchHistoryAdmin
-
+from starlette.middleware.sessions import SessionMiddleware
+from admin_auth import AdminAuth
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
@@ -32,7 +33,22 @@ async def read_index():
     return FileResponse("static/index.html")
 
 # --- АДМИНКА ---
-admin = Admin(app, engine, title="Админ-панель")
+app.add_middleware(
+    SessionMiddleware,
+    secret_key="SECRET_KEY_FOR_COOKIES_123",
+    max_age=3600,
+    https_only=False,
+    same_site="lax"
+)
+authentication_backend = AdminAuth(secret_key="SECRET_KEY_FOR_COOKIES_123")
+
+admin = Admin(
+    app,
+    engine,
+    title="Админ-панель",
+    authentication_backend=authentication_backend
+)
+
 admin.add_view(UserAdmin)
 admin.add_view(TaskAdmin)
 admin.add_view(MatchHistoryAdmin)
