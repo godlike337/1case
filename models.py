@@ -12,7 +12,6 @@ class User(Base):
     password: Mapped[str] = mapped_column()
     role: Mapped[str] = mapped_column(default="user")
 
-    #Поля статистики
     rating: Mapped[int] = mapped_column(default=1000)
     wins: Mapped[int] = mapped_column(default=0)
     losses: Mapped[int] = mapped_column(default=0)
@@ -27,17 +26,23 @@ class Task(Base):
     description: Mapped[str] = mapped_column()
     difficulty: Mapped[int] = mapped_column()
     correct_answer: Mapped[str] = mapped_column()
-
-    #Предмет
-    subject: Mapped[str] = mapped_column(default="None")
+    subject: Mapped[str] = mapped_column(default="python")
 
 
-#История
 class MatchHistory(Base):
     __tablename__ = "match_history"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    winner_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    loser_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+
+    # Внешние ключи
+    winner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=True)
+    loser_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+    # --- МАГИЯ: Связь с таблицей Users ---
+    winner = relationship("User", foreign_keys=[winner_id])
+    loser = relationship("User", foreign_keys=[loser_id])
+
     subject: Mapped[str] = mapped_column()
     played_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    winner_score: Mapped[int] = mapped_column(default=0)
+    loser_score: Mapped[int] = mapped_column(default=0)

@@ -1,45 +1,57 @@
+import asyncio
 from fastapi import WebSocket
-from typing import List, Dict
+from typing import List, Dict, Any
+from collections import defaultdict
 
 
 class ConnectionManager:
     def __init__(self):
-        # Список тех, кто ждет игру (очередь)
-        self.waiting_queue: List[WebSocket] = []
-        # Активные игры: {id_комнаты: [игрок1, игрок2]}
-        self.active_matches: Dict[str, List[WebSocket]] = {}
+        self.waiting_queues: Dict[str, List[int]] = defaultdict(list)
+        # Храним сокеты: { user_id: WebSocket }
+        self.active_connections: Dict[int, WebSocket] = {}
+        # Храним очереди сообщений: { user_id: asyncio.Queue }
+        self.user_queues: Dict[int, asyncio.Queue] = {}
 
-    async def connect(self, websocket: WebSocket):
+    async def connect(self, websocket: WebSocket, user_id: int):
         await websocket.accept()
+        self.active_connections[user_id] = websocket
+        self.user_queues[user_id] = asyncio.Queue()
 
-    def disconnect(self, websocket: WebSocket):
-        # Если игрок был в очереди — убираем
-        if websocket in self.waiting_queue:
-            self.waiting_queue.remove(websocket)
-        # (Доп. логику разрыва матча добавим позже)
+    def disconnect(self, user_id: int):
+        if user_id in self.active_connections:
+            del self.active_connections[user_id]
+        if user_id in self.user_queues:
+            del self.user_queues[user_id]
 
-    async def find_match(self, websocket: WebSocket):
-        """
-        Главная логика: ищем пару.
-        Если в очереди никого нет -> встаем в очередь.
-        Если кто-то есть -> создаем пару и начинаем игру!
-        """
-        if len(self.waiting_queue) > 0:
-            # Нашли соперника!
-            opponent = self.waiting_queue.pop(0)
+        # Удаляем из очередей ожидания
+        for subject, queue in self.waiting_queues.items():
+            if user_id in queue:
+                queue.remove(user_id)
+                break
 
-            # Отправляем обоим сообщение "МАТЧ НАЙДЕН"
-            await websocket.send_json({"type": "match_start", "opponent": "Player 2"})
-            await opponent.send_json({"type": "match_start", "opponent": "Player 1"})
+    def get_socket(self, user_id: int):
+        return self.active_connections.get(user_id)
 
-            # Возвращаем список игроков матча
-            return [websocket, opponent]
+    def get_queue(self, user_id: int):
+        return self.user_queues.get(user_id)
+
+    async def find_match(self, user_id: int, subject: str):
+        queue = self.waiting_queues[subject]
+
+        # Удаляем себя из очереди если вдруг там зависли
+        if user_id in queue:
+            queue.remove(user_id)
+
+        if len(queue) > 0:
+            opponent_id = queue.pop(0)
+            return [user_id, opponent_id]
         else:
-            # Никого нет, ждем...
-            self.waiting_queue.append(websocket)
-            await websocket.send_json({"type": "waiting", "message": "Ожидание соперника..."})
+            queue.append(user_id)
+            # Отправляем сообщение "Жди"
+            ws = self.get_socket(user_id)
+            if ws:
+                await ws.send_json({"type": "waiting", "message": "Поиск..."})
             return None
 
 
-# Создаем один экземпляр менеджера на всё приложение
 manager = ConnectionManager()

@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Olympus PvP</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        /* ОБЩИЕ СТИЛИ */
+        body { background: #0f0f13; color: #ecf0f1; font-family: 'Inter', sans-serif; margin: 0; display: flex; justify-content: center; min-height: 100vh; }
+        .app { width: 100%; max-width: 500px; padding: 20px; display: flex; flex-direction: column; }
+
+        .card { background: #1e1e24; padding: 24px; border-radius: 16px; margin-bottom: 20px; border: 1px solid #2d2d35; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+
+        input, select { width: 100%; padding: 16px; margin: 10px 0; background: #2b2b36; border: 2px solid #3f3f4e; color: white; border-radius: 12px; box-sizing: border-box; font-size: 16px; outline: none; }
+        input:focus { border-color: #6c5ce7; }
+
+        button { width: 100%; padding: 16px; background: linear-gradient(135deg, #6c5ce7, #a29bfe); color: white; border: none; border-radius: 12px; font-weight: 800; font-size: 16px; cursor: pointer; margin-top: 10px; text-transform: uppercase; }
+        button:disabled { background: #444; opacity: 0.7; cursor: not-allowed; }
+        .btn-secondary { background: transparent; border: 2px solid #444; color: #888; }
+
+        .win-text { color: #00b894; } .lose-text { color: #ff7675; } .draw-text { color: #fab1a0; }
+        .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-weight: bold; }
+        .score-box { background: #2d3436; padding: 5px 15px; border-radius: 20px; font-size: 14px; }
+        .timer-big { font-size: 32px; text-align: center; color: #fdcb6e; margin: 15px 0; font-weight: 800; }
+
+        .correct-answer-box { background: rgba(255, 118, 117, 0.1); border: 1px solid #ff7675; color: #ff7675; padding: 10px; border-radius: 8px; margin-top: 10px; font-weight: bold; }
+
+        .next-round-bar { height: 4px; background: #333; margin-top: 20px; border-radius: 2px; overflow: hidden; }
+        .next-round-progress { height: 100%; background: #6c5ce7; width: 100%; transition: width 0.1s linear; }
+
+        .stat-row { display: flex; justify-content: space-between; margin-bottom: 8px; color: #b2bec3; }
+        .stat-val { color: white; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div id="app" class="app">
+
+    <!-- 1. ВХОД -->
+    <div v-if="!token">
+        <h1 style="text-align: center;">🚀 OLYMPUS</h1>
+        <div class="card">
+            <h3 style="margin-top: 0;">Вход в систему</h3>
+            <input v-model="authForm.username" placeholder="Логин">
+            <input v-model="authForm.password" type="password" placeholder="Пароль" @keyup.enter="login">
+            <button @click="login">Войти</button>
+            <button class="btn-secondary" @click="register">Регистрация</button>
+        </div>
+    </div>
+
+    <!-- 2. МЕНЮ СТАТИСТИКИ -->
+    <div v-else-if="state === 'menu'">
+        <div class="header-bar">
+            <span>👤 {{ userStats.username || 'Игрок' }}</span>
+            <button style="width: auto; padding: 8px 16px; font-size: 12px; margin: 0;" class="btn-secondary" @click="logout">Выйти</button>
+        </div>
+
+        <!-- БЛОК СТАТИСТИКИ -->
+        <div class="card">
+            <h3 style="margin-top: 0;">📊 Моя статистика</h3>
+            <div class="stat-row">
+                <span>Рейтинг (ELO)</span>
+                <span class="stat-val" style="color: #fdcb6e">{{ userStats.rating || 1000 }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Сыграно матчей</span>
+                <span class="stat-val">{{ userStats.matches_played || 0 }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Побед</span>
+                <span class="stat-val" style="color: #00b894">{{ userStats.wins || 0 }}</span>
+            </div>
+             <div class="stat-row">
+                <span>Поражений</span>
+                <span class="stat-val" style="color: #ff7675">{{ userStats.losses || 0 }}</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>⚔️ Начать битву</h3>
+            <label style="font-size: 12px; color: #888; font-weight: bold;">ПРЕДМЕТ</label>
+            <select v-model="subject">
+                <option value="python">🐍 Python</option>
+                <option value="math">📐 Математика</option>
+            </select>
+            <button @click="startSearch">Найти соперника</button>
+        </div>
+    </div>
+
+    <!-- 3. ПОИСК -->
+    <div v-else-if="state === 'searching'" style="text-align: center; margin-top: 100px;">
+        <h1 style="font-size: 60px; animation: pulse 1s infinite;">📡</h1>
+        <h2>Поиск...</h2>
+        <button class="btn-secondary" style="width: 200px;" @click="reset">Отмена</button>
+    </div>
+
+    <!-- 4. ИГРА -->
+    <div v-else-if="state === 'playing'">
+        <div class="header-bar">
+            <div class="score-box" :style="{border: '1px solid ' + (myScore > enemyScore ? '#00b894' : '#555')}">Вы: {{ myScore }}</div>
+            <div style="color: #888; font-size: 12px;">РАУНД {{ currentRound }}/{{ totalRounds }}</div>
+            <div class="score-box" :style="{border: '1px solid ' + (enemyScore > myScore ? '#d63031' : '#555')}">Враг: {{ enemyScore }}</div>
+        </div>
+
+        <div class="timer-big" :style="{color: timeLeft < 5 ? '#ff7675' : '#fdcb6e'}">
+            {{ timeLeft }}
+        </div>
+
+        <div class="card">
+            <span style="font-size: 12px; color: #6c5ce7; font-weight: bold;">ВОПРОС</span>
+            <h3 style="margin: 5px 0 10px 0;">{{ task.title }}</h3>
+            <p style="line-height: 1.6; color: #b2bec3;">{{ task.desc }}</p>
+        </div>
+
+        <div v-if="!roundFinished">
+            <input id="answerInput" v-model="answer" placeholder="Ответ..." autocomplete="off" @keyup.enter="sendAnswer" :disabled="answerSent">
+            <button @click="sendAnswer" :disabled="answerSent" :style="{background: answerSent ? '#2d3436' : ''}">
+                {{ answerSent ? '⏳ Ждем соперника...' : 'ОТВЕТИТЬ' }}
+            </button>
+        </div>
+
+        <div v-else class="card" style="text-align: center;">
+            <div v-if="roundResult.you === 'correct'">
+                <h2 class="win-text">✅ Верно! (+1)</h2>
+            </div>
+            <div v-else>
+                <h2 class="lose-text">❌ Ошибка</h2>
+                <!-- ИСПРАВЛЕННЫЙ ВЫВОД ПРАВИЛЬНОГО ОТВЕТА -->
+                <div class="correct-answer-box">
+                    Правильный ответ: {{ roundResult.correct }}
+                </div>
+            </div>
+
+            <div style="margin-top: 20px;">
+                <div style="display: flex; justify-content: space-between; font-size: 12px; color: #888;">
+                    <span>Далее через:</span>
+                    <!-- КРАСИВЫЙ ТАЙМЕР -->
+                    <span>{{ nextRoundTimer.toFixed(1) }} с</span>
+                </div>
+                <div class="next-round-bar">
+                    <div class="next-round-progress" :style="{width: (nextRoundTimer / 4 * 100) + '%'}"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. ФИНАЛ -->
+    <div v-else-if="state === 'finished'" style="text-align: center; padding-top: 50px;">
+        <h1 v-if="finalData.result === 'win'" class="win-text" style="font-size: 40px;">🏆 ПОБЕДА!</h1>
+        <h1 v-else-if="finalData.result === 'lose'" class="lose-text" style="font-size: 40px;">💀 ПОРАЖЕНИЕ</h1>
+        <h1 v-else class="draw-text">🤝 НИЧЬЯ</h1>
+
+        <h2>{{ myScore }} : {{ enemyScore }}</h2>
+        <button @click="reset">В ГЛАВНОЕ МЕНЮ</button>
+    </div>
+</div>
+
+<script>
+    const { createApp } = Vue
+
+    createApp({
+        data() {
+            return {
+                token: localStorage.getItem('olymp_token') || null,
+                authForm: { username: '', password: '' },
+                userStats: {}, // Сюда загрузим статистику
+
+                state: 'menu',
+                subject: 'python',
+                ws: null,
+
+                task: {}, answer: '', answerSent: false,
+                timeLeft: 0, gameTimer: null,
+                currentRound: 1, totalRounds: 3,
+                myScore: 0, enemyScore: 0,
+
+                roundFinished: false, roundResult: {},
+                nextRoundTimer: 0, nextRoundInterval: null,
+                finalData: {}
+            }
+        },
+        mounted() {
+            if (this.token) this.fetchStats();
+        },
+        methods: {
+            async fetchStats() {
+                try {
+                    const res = await fetch('/users/me', {
+                        headers: { 'Authorization': `Bearer ${this.token}` }
+                    });
+                    if (res.ok) {
+                        this.userStats = await res.json();
+                    }
+                } catch (e) { console.error(e); }
+            },
+            async login() {
+                const formData = new URLSearchParams();
+                formData.append('username', this.authForm.username);
+                formData.append('password', this.authForm.password);
+                try {
+                    const res = await fetch('/token', { method: 'POST', body: formData });
+                    if (!res.ok) throw new Error();
+                    const data = await res.json();
+                    this.token = data.access_token;
+                    localStorage.setItem('olymp_token', this.token);
+                    this.fetchStats(); // Загружаем стату сразу после входа
+                } catch (e) { alert("Ошибка входа"); }
+            },
+            async register() {
+                try {
+                    await fetch('/register', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(this.authForm)
+                    });
+                    await this.login();
+                } catch (e) { alert("Логин занят"); }
+            },
+            logout() {
+                this.token = null;
+                localStorage.removeItem('olymp_token');
+                this.state = 'menu';
+                this.userStats = {};
+            },
+            startSearch() {
+                this.state = 'searching';
+                const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+                this.ws = new WebSocket(`${protocol}://${location.host}/ws/pvp?subject=${this.subject}&token=${this.token}`);
+
+                this.ws.onmessage = (e) => {
+                    const data = JSON.parse(e.data);
+                    if (data.type === 'round_start') this.startRound(data);
+                    else if (data.type === 'round_result') this.showRoundResult(data);
+                    else if (data.type === 'game_over') this.endGame(data);
+                    else if (data.type === 'error') { alert(data.message); this.reset(); }
+                };
+            },
+            startRound(data) {
+                clearInterval(this.nextRoundInterval);
+                this.nextRoundTimer = 0;
+                this.state = 'playing';
+                this.roundFinished = false;
+                this.answerSent = false;
+                this.answer = '';
+                this.task = { title: data.title, desc: data.desc };
+                this.currentRound = data.round;
+                this.totalRounds = data.total;
+
+                setTimeout(() => { document.getElementById('answerInput')?.focus(); }, 100);
+
+                this.timeLeft = data.time;
+                if (this.gameTimer) clearInterval(this.gameTimer);
+                this.gameTimer = setInterval(() => { if(this.timeLeft > 0) this.timeLeft--; }, 1000);
+            },
+            sendAnswer() {
+                if (!this.answer || this.answerSent) return;
+                this.ws.send(JSON.stringify({answer: this.answer}));
+                this.answerSent = true;
+            },
+            showRoundResult(data) {
+                this.roundFinished = true;
+                // ВАЖНО: сохраняем правильный ответ из JSON
+                this.roundResult = {
+                    you: data.you,
+                    enemy: data.enemy,
+                    correct: data.correct_answer
+                };
+
+                if (data.you === 'correct') this.myScore++;
+                if (data.enemy === 'correct') this.enemyScore++;
+
+                this.nextRoundTimer = 4;
+                if (this.nextRoundInterval) clearInterval(this.nextRoundInterval);
+                this.nextRoundInterval = setInterval(() => {
+                    if (this.nextRoundTimer > 0) this.nextRoundTimer -= 0.1;
+                }, 100);
+            },
+            endGame(data) {
+                clearInterval(this.gameTimer);
+                clearInterval(this.nextRoundInterval);
+                this.state = 'finished';
+                this.finalData = data;
+                this.fetchStats(); // Обновляем стату после игры!
+            },
+            reset() {
+                if (this.ws) this.ws.close();
+                this.state = 'menu';
+                this.myScore = 0; this.enemyScore = 0;
+            }
+        }
+    }).mount('#app')
+</script>
+
+</body>
+</html>

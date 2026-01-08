@@ -1,12 +1,15 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles # <--- ИМПОРТ
+from starlette.responses import FileResponse # <--- ИМПОРТ
 from contextlib import asynccontextmanager
 
 from sqladmin import Admin
 from database import engine, Base, get_db
 import auth
 import tasks
-import pvp
-from admin_panel import UserAdmin, TaskAdmin
+import pvp # Не забудь, если еще нет
+from admin_panel import UserAdmin, TaskAdmin, MatchHistoryAdmin
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
@@ -17,12 +20,22 @@ async def lifespan(app: FastAPI):
         break
     yield
 
-
 app = FastAPI(lifespan=lifespan, title="Платформа для олимпиад")
-admin = Admin(app, engine, title="Админ-панель (Dev Mode)")
 
+# --- ПОДКЛЮЧЕНИЕ СТАТИКИ ---
+# Теперь папка static доступна по адресу /static
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# ГЛАВНАЯ СТРАНИЦА отдаем index.html
+@app.get("/")
+async def read_index():
+    return FileResponse("static/index.html")
+
+# --- АДМИНКА ---
+admin = Admin(app, engine, title="Админ-панель")
 admin.add_view(UserAdmin)
 admin.add_view(TaskAdmin)
+admin.add_view(MatchHistoryAdmin)
 
 app.include_router(auth.router)
 app.include_router(tasks.router)
