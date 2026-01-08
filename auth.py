@@ -10,7 +10,8 @@ from models import MatchHistory, User
 from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 from database import get_db
-from schemas import UserCreate, UserResponse, Token
+from schemas import UserCreate, UserResponse, Token, MatchHistoryResponse
+from models import User, Achievement
 
 #настройки
 SECRET_KEY = "secret_key"
@@ -82,19 +83,30 @@ async def create_initial_admin_user(db: AsyncSession):
 
 #эндпоиты
 
-@router.post("/register", response_model=UserResponse)
+router.post("/register", response_model=UserResponse)
+
+
 async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
-    #проверка на дубликат
     existing = await db.execute(select(User).where(User.username == user.username))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Username already taken")
 
-    new_user = User(username=user.username, password=get_password_hash(user.password))
+    existing_email = await db.execute(select(User).where(User.email == user.email))
+    if existing_email.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    # ЗАГЛУШКА
+    print(f"📧 [STUB] Sending confirmation email to: {user.email}")
+
+    new_user = User(
+        username=user.username,
+        email=user.email,  # Сохраняем почту
+        password=get_password_hash(user.password)
+    )
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
     return new_user
-
 
 @router.post("/token", response_model=Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
@@ -143,3 +155,18 @@ async def get_my_history(
 
     result = await db.execute(query)
     return result.scalars().all()
+
+
+async def create_initial_achievements(db: AsyncSession):
+    achievements_data = [
+        {"name": "Первая кровь", "desc": "Победить в 1 матче", "icon": "🩸"},
+        {"name": "Гладиатор", "desc": "Победить в 5 матчах", "icon": "⚔️"},
+        {"name": "Пятый элемент", "desc": "Достичь 5 уровня", "icon": "🌟"},
+    ]
+
+    for ach in achievements_data:
+        res = await db.execute(select(Achievement).where(Achievement.name == ach["name"]))
+        if not res.scalar_one_or_none():
+            db.add(Achievement(name=ach["name"], description=ach["desc"], icon=ach["icon"]))
+
+    await db.commit()

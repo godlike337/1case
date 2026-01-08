@@ -1,35 +1,46 @@
-from pydantic import BaseModel
-from datetime import datetime
-from typing import Optional
+from typing import List, Optional
+from pydantic import BaseModel, EmailStr
 
-# --- ПОЛЬЗОВАТЕЛИ ---
+
+class AchievementResponse(BaseModel):
+    name: str
+    description: str
+    icon: str
+
+    class Config:
+        from_attributes = True
+
+
 class UserCreate(BaseModel):
     username: str
+    email: str  # <--- NEW
     password: str
 
 
 class UserResponse(BaseModel):
     id: int
     username: str
+    email: Optional[str] = None
     role: str
 
-    # Поля статистики
     rating: int
+    xp: int
+    level: int
     wins: int
     losses: int
-    matches_played: int
+
+    achievements: List[AchievementResponse] = []
 
     class Config:
         from_attributes = True
 
 
-# --- ТОКЕНЫ ---
+
 class Token(BaseModel):
     access_token: str
     token_type: str
 
 
-# --- ЗАДАЧИ ---
 class TaskCreate(BaseModel):
     title: str
     description: str
@@ -44,12 +55,12 @@ class TaskResponse(BaseModel):
     description: str
     difficulty: int
     subject: str
+    is_solved: bool = False
 
     class Config:
         from_attributes = True
 
 
-# --- ВОТ ЭТОГО НЕ ХВАТАЛО ---
 class TaskAttempt(BaseModel):
     user_answer: str
 
@@ -57,21 +68,16 @@ class TaskAttempt(BaseModel):
 class UserShort(BaseModel):
     username: str
 
-    class Config:
-        from_attributes = True
+    class Config: from_attributes = True
 
 
-# Схема одной записи истории
 class MatchHistoryResponse(BaseModel):
     id: int
     subject: str
-    played_at: datetime
+    played_at: str
     winner_score: int
     loser_score: int
-
-    # Вложенные объекты (кто выиграл, кто проиграл)
     winner: Optional[UserShort]
     loser: Optional[UserShort]
 
-    class Config:
-        from_attributes = True
+    class Config: from_attributes = True
