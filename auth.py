@@ -1,14 +1,17 @@
 from datetime import datetime, timedelta
-from typing import Optional
+from schemas import UserCreate, UserResponse, Token, MatchHistoryResponse
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from passlib.context import CryptContext
 from jose import JWTError, jwt
+from passlib.context import CryptContext
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List
+from models import MatchHistory, User
+from sqlalchemy import or_, select
+from sqlalchemy.orm import selectinload
 from database import get_db
-from models import User
 from schemas import UserCreate, UserResponse, Token
+
 #настройки
 SECRET_KEY = "secret_key"
 ALGORITHM = "HS256"
@@ -120,3 +123,23 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
 @router.get("/admin_test", dependencies=[Depends(get_current_admin_user)])
 async def admin_test():
     return {"message": "Вы вошли как администратор!"}
+#история матчей
+@router.get("/users/me/history", response_model=List[MatchHistoryResponse])
+async def get_my_history(
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db)
+):
+    # Ищем матчи, где юзер был победителем ИЛИ проигравшим
+    # Используем options(selectinload(...)), чтобы сразу подтянуть имена
+    query = select(MatchHistory).where(
+        or_(
+            MatchHistory.winner_id == current_user.id,
+            MatchHistory.loser_id == current_user.id
+        )
+    ).options(
+        selectinload(MatchHistory.winner),
+        selectinload(MatchHistory.loser)
+    ).order_by(MatchHistory.played_at.desc())  # Сначала новые
+
+    result = await db.execute(query)
+    return result.scalars().all()

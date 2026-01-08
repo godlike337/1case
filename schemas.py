@@ -1,5 +1,6 @@
 from pydantic import BaseModel
-
+from datetime import datetime
+from typing import Optional
 
 # --- ПОЛЬЗОВАТЕЛИ ---
 class UserCreate(BaseModel):
@@ -51,3 +52,26 @@ class TaskResponse(BaseModel):
 # --- ВОТ ЭТОГО НЕ ХВАТАЛО ---
 class TaskAttempt(BaseModel):
     user_answer: str
+
+
+class UserShort(BaseModel):
+    username: str
+
+    class Config:
+        from_attributes = True
+
+
+# Схема одной записи истории
+class MatchHistoryResponse(BaseModel):
+    id: int
+    subject: str
+    played_at: datetime
+    winner_score: int
+    loser_score: int
+
+    # Вложенные объекты (кто выиграл, кто проиграл)
+    winner: Optional[UserShort]
+    loser: Optional[UserShort]
+
+    class Config:
+        from_attributes = True
