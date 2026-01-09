@@ -7,19 +7,23 @@ from sqladmin import Admin, ModelView
 from database import engine, Base, get_db
 import auth
 import tasks
-import pvp # Не забудь, если еще нет
+import pvp
 from admin_panel import UserAdmin, TaskAdmin, MatchHistoryAdmin
 from starlette.middleware.sessions import SessionMiddleware
 from admin_auth import AdminAuth
 from models import Achievement
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    print("--- БАЗА ДАННЫХ ПОДКЛЮЧЕНА ---")
-    async for db_session in get_db():
-        await auth.create_initial_admin_user(db_session)
-        break
+
+    async with new_session() as db:
+        await auth.create_initial_admin_user(db)
+        await auth.create_initial_achievements(db)
+
+    print("--- СЕРВЕР ЗАПУЩЕН, БАЗА ГОТОВА ---")
     yield
 
 class AchievementAdmin(ModelView, model=Achievement):
@@ -43,16 +47,12 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan, title="Платформа для олимпиад")
 
-# --- ПОДКЛЮЧЕНИЕ СТАТИКИ ---
-# Теперь папка static доступна по адресу /static
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# ГЛАВНАЯ СТРАНИЦА отдаем index.html
 @app.get("/")
 async def read_index():
     return FileResponse("static/index.html")
 
-# --- АДМИНКА ---
 app.add_middleware(
     SessionMiddleware,
     secret_key="SECRET_KEY_FOR_COOKIES_123",

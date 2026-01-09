@@ -1,44 +1,59 @@
-from fastapi import APIRouter, Depends, HTTPException
+import asyncio
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
 from database import get_db
 from models import Task, User, SolvedTask
-from schemas import TaskCreate, TaskResponse, TaskAttempt
+from schemas import TaskResponse, TaskAttempt, HintResponse, GenerateRequest
 from auth import get_current_user
 import gamification
+from ai_client import ai_service
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
-@router.get("/", response_model=list[TaskResponse])
-async def get_tasks(
-        subject: str = None,
+@router.post("/training/generate", response_model=TaskResponse)
+async def generate_training_task(
+        req: GenerateRequest,
         db: AsyncSession = Depends(get_db),
         current_user: User = Depends(get_current_user)
 ):
-    # 1. Получаем задачи
-    query = select(Task)
-    if subject:
-        query = query.where(Task.subject == subject)
+    ai_data = await ai_service.generate_task(req.subject, req.topic)
 
-    result = await db.execute(query)
-    tasks = result.scalars().all()
+    new_task = Task(
+        subject=req.subject, topic=req.topic,
+        title=ai_data.title, description=ai_data.description,
+        difficulty=ai_data.difficulty, task_type=ai_data.task_type,
+        options=ai_data.options, correct_answer=ai_data.correct_answer,
+        hints=ai_data.hints
+    )
+    db.add(new_task)
+    await db.commit()
+    await db.refresh(new_task)
 
-    # 2. Получаем список ID решенных задач этим юзером
-    solved_query = select(SolvedTask.task_id).where(SolvedTask.user_id == current_user.id)
-    solved_res = await db.execute(solved_query)
-    solved_ids = set(solved_res.scalars().all())
+    resp = TaskResponse.model_validate(new_task)
+    resp.hints_available = len(new_task.hints) if new_task.hints else 0
+    return resp
 
-    # 3. Собираем ответ с флагом is_solved
-    response = []
-    for t in tasks:
-        # Pydantic модель создаем вручную, добавляя флаг
-        task_data = TaskResponse.model_validate(t)
-        task_data.is_solved = (t.id in solved_ids)
-        response.append(task_data)
+@router.get("/{task_id}/hint", response_model=HintResponse)
+async def get_hint(
+        task_id: int,
+        hint_number: int = Query(..., ge=1),  # 1, 2...
+        db: AsyncSession = Depends(get_db),
+        current_user: User = Depends(get_current_user)
+):
+    res = await db.execute(select(Task).where(Task.id == task_id))
+    task = res.scalar_one_or_none()
 
-    return response
+    if not task or not task.hints:
+        raise HTTPException(404, "Подсказок нет")
+
+    idx = hint_number - 1
+    if idx < 0 or idx >= len(task.hints):
+        raise HTTPException(400, "Такой подсказки нет")
+
+    return HintResponse(hint_text=task.hints[idx], hint_number=hint_number)
 
 
 @router.post("/{task_id}/solve")
@@ -48,42 +63,32 @@ async def solve_task(
         db: AsyncSession = Depends(get_db),
         current_user: User = Depends(get_current_user)
 ):
-    # Ищем задачу
-    result = await db.execute(select(Task).where(Task.id == task_id))
-    task = result.scalar_one_or_none()
+    res = await db.execute(select(Task).where(Task.id == task_id))
+    task = res.scalar_one_or_none()
+    if not task: raise HTTPException(404, "Задача не найдена")
 
-    if not task:
-        raise HTTPException(status_code=404, detail="Задача не найдена")
+    def normalize(s):
+        return str(s).strip().lower().replace(" ", "")
 
-    # Проверка ответа
-    user_ans = attempt.user_answer.strip().lower()
-    correct_ans = task.correct_answer.strip().lower()
+    user_ans = normalize(attempt.user_answer)
+    correct_ans = normalize(task.correct_answer)
 
-    if user_ans == correct_ans:
-        # ПРОВЕРКА НА ДЮП ОПЫТА
-        # Проверяем, решал ли он её раньше
-        check_solved = await db.execute(
-            select(SolvedTask).where(
-                and_(SolvedTask.user_id == current_user.id, SolvedTask.task_id == task_id)
-            )
-        )
-        if check_solved.scalar_one_or_none():
-            return {"status": "correct", "message": "Верно! (Задача уже была решена, опыт не начислен)"}
+    is_correct = (user_ans == correct_ans)
 
-        # Если не решал:
-        # 1. Записываем в решенные
-        new_solved = SolvedTask(user_id=current_user.id, task_id=task_id)
-        db.add(new_solved)
+    if not is_correct and task.task_type == "choice" and task.options:
+        if user_ans in correct_ans or correct_ans in user_ans:
+            is_correct = True
 
-        # 2. Даем опыт
-        new_achievements = await gamification.process_xp(current_user, 5, db)
+    if is_correct:
+        check = await db.execute(select(SolvedTask).where(
+            and_(SolvedTask.user_id == current_user.id, SolvedTask.task_id == task_id)
+        ))
+        if check.scalar_one_or_none():
+            return {"status": "correct", "message": "Верно! (Уже решено)"}
 
+        db.add(SolvedTask(user_id=current_user.id, task_id=task_id))
+        await gamification.process_xp(current_user, 10 * task.difficulty, db)  # XP зависит от сложности!
         await db.commit()
+        return {"status": "correct", "message": f"Верно! +{10 * task.difficulty} XP"}
 
-        msg = "Верно! +5 XP"
-        if new_achievements:
-            msg += f" | Ачивка: {', '.join(new_achievements)}"
-
-        return {"status": "correct", "message": msg}
-    else:
-        return {"status": "wrong", "message": "Неверно"}
+    return {"status": "wrong", "message": "Неверно"}

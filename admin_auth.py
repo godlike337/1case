@@ -13,15 +13,10 @@ class AdminAuth(AuthenticationBackend):
         username = form.get("username")
         password = form.get("password")
 
-        # Открываем сессию БД
         async with new_session() as session:
             result = await session.execute(select(User).where(User.username == username))
             user = result.scalar_one_or_none()
 
-            # Проверка:
-            # 1. Пользователь существует
-            # 2. Пароль совпадает (сравниваем хеш)
-            # 3. Роль == admin (чтобы обычные юзеры не вошли)
             if user and verify_password(password, user.password) and user.role == "admin":
                 request.session.update({"token": user.username})
                 return True

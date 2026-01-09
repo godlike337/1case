@@ -11,6 +11,7 @@ from database import get_db, new_session
 from models import Task, MatchHistory, User
 from connection_manager import manager
 from auth import SECRET_KEY, ALGORITHM
+import gamification
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("PvP")
@@ -20,8 +21,6 @@ router = APIRouter()
 ROUNDS_COUNT = 3
 ROUND_TIME = 20
 
-
-# --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 async def get_user_from_token(token: str, db: AsyncSession):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -33,26 +32,38 @@ async def get_user_from_token(token: str, db: AsyncSession):
     return result.scalar_one_or_none()
 
 
-# --- ФУНКЦИЯ БЕЗОПАСНОЙ ОТПРАВКИ ---
-async def send_msg(ws: WebSocket, msg: dict):
+async def safe_send(ws: WebSocket, data: dict):
     try:
-        await ws.send_json(msg)
+        await ws.send_json(data)
         return True
     except Exception:
-        return False  # Не удалось отправить (игрок вышел)
+        return False
 
 
-# --- РАСЧЕТ ELO ---
 def calc_new_rating(rating_a: int, rating_b: int, actual_score: float):
     k = 32
     expected_a = 1 / (1 + 10 ** ((rating_b - rating_a) / 400))
     return int(rating_a + k * (actual_score - expected_a))
 
 
-# =========================================================================
-# ЧИТАТЕЛЬ СОКЕТА (PRODUCER)
-# =========================================================================
-async def socket_reader(ws: WebSocket, queue: asyncio.Queue, player_name: str):
+async def wait_for_queues(q1: asyncio.Queue, q2: asyncio.Queue, timeout: int):
+    async def get_from_q(q):
+        return await q.get()
+
+    task1 = asyncio.create_task(get_from_q(q1))
+    task2 = asyncio.create_task(get_from_q(q2))
+
+    done, pending = await asyncio.wait([task1, task2], timeout=timeout)
+
+    for task in pending: task.cancel()
+
+    return {
+        "p1": task1.result() if task1 in done else None,
+        "p2": task2.result() if task2 in done else None
+    }
+
+
+async def socket_reader(ws: WebSocket, queue: asyncio.Queue):
     try:
         while True:
             data = await ws.receive_json()
@@ -60,12 +71,9 @@ async def socket_reader(ws: WebSocket, queue: asyncio.Queue, player_name: str):
             if answer is not None:
                 await queue.put(str(answer).strip())
     except Exception:
-        await queue.put(None)  # Сигнал разрыва
+        await queue.put(None)
 
 
-# =========================================================================
-# ЭНДПОИНТ (ВХОД)
-# =========================================================================
 @router.websocket("/ws/pvp")
 async def websocket_endpoint(
         websocket: WebSocket,
@@ -73,196 +81,130 @@ async def websocket_endpoint(
         token: str = Query(None),
         db: AsyncSession = Depends(get_db)
 ):
-    if not token:
-        await websocket.close(code=1008)
-        return
+    if not token: await websocket.close(code=1008); return
     user = await get_user_from_token(token, db)
-    if not user:
-        await websocket.close(code=1008)
-        return
+    if not user: await websocket.close(code=1008); return
 
     user_id = user.id
-    logger.info(f"Игрок {user.username} подключился.")
+    logger.info(f"Игрок {user.username} (ID: {user.id}) подключился.")
 
     await manager.connect(websocket, user_id)
-
-    # Личная очередь сообщений
     my_queue = asyncio.Queue()
     manager.user_queues[user_id] = my_queue
 
-    # Запуск читателя
-    reader_task = asyncio.create_task(socket_reader(websocket, my_queue, user.username))
+    reader_task = asyncio.create_task(socket_reader(websocket, my_queue))
 
     try:
         players_ids = await manager.find_match(user_id, subject)
-
         if players_ids:
             p1_id, p2_id = players_ids
-            # Запуск игры
             asyncio.create_task(run_pvp_game(p1_id, p2_id, subject))
-
-        # Ждем пока сокет жив
         await reader_task
-
     except Exception as e:
-        logger.error(f"Ошибка сокета {user_id}: {e}")
+        logger.error(f"Error socket {user_id}: {e}")
     finally:
         reader_task.cancel()
         manager.disconnect(user_id)
 
 
-# =========================================================================
-# ИГРОВОЙ ЦИКЛ (CONSUMER)
-# =========================================================================
 async def run_pvp_game(id1: int, id2: int, subject: str):
-    logger.info(f"🎮 СТАРТ: {id1} vs {id2}")
-
-    ws1 = manager.get_socket(id1)
-    ws2 = manager.get_socket(id2)
-    q1 = manager.get_queue(id1)
-    q2 = manager.get_queue(id2)
+    ws1, ws2 = manager.get_socket(id1), manager.get_socket(id2)
+    q1, q2 = manager.get_queue(id1), manager.get_queue(id2)
 
     if not ws1 or not ws2: return
 
+    name1, name2 = "Player 1", "Player 2"
+    scores = {id1: 0, id2: 0}
+
     try:
-        # Подготовка задач
         async with new_session() as session:
-            result = await session.execute(select(Task).where(Task.subject == subject))
-            all_tasks = result.scalars().all()
+            res = await session.execute(select(User).where(User.id.in_([id1, id2])))
+            users = {u.id: u for u in res.scalars().all()}
+            if users.get(id1): name1 = users[id1].username
+            if users.get(id2): name2 = users[id2].username
+
+            t_res = await session.execute(select(Task).where(Task.subject == subject))
+            all_tasks = t_res.scalars().all()
 
         if not all_tasks:
-            await send_msg(ws1, {"type": "error", "message": "Нет задач"})
-            await send_msg(ws2, {"type": "error", "message": "Нет задач"})
+            await safe_send(ws1, {"type": "error", "message": "Нет задач"})
+            await safe_send(ws2, {"type": "error", "message": "Нет задач"})
             return
 
         game_tasks = random.sample(all_tasks, k=min(len(all_tasks), ROUNDS_COUNT))
-        while len(game_tasks) < ROUNDS_COUNT: game_tasks.append(random.choice(all_tasks))
 
-        scores = {id1: 0, id2: 0}
+        await safe_send(ws1, {"type": "match_found", "opponent": name2, "time": 5})
+        await safe_send(ws2, {"type": "match_found", "opponent": name1, "time": 5})
+        await asyncio.sleep(5)
 
-        # --- ЦИКЛ РАУНДОВ ---
         for i, task in enumerate(game_tasks):
-            # Очистка очередей
             while not q1.empty(): q1.get_nowait()
             while not q2.empty(): q2.get_nowait()
 
             msg = {
-                "type": "round_start",
-                "round": i + 1,
-                "total": ROUNDS_COUNT,
-                "title": task.title,
-                "desc": task.description,
-                "time": ROUND_TIME
+                "type": "round_start", "round": i + 1, "total": len(game_tasks),
+                "title": task.title, "desc": task.description, "time": ROUND_TIME
             }
+            if not await safe_send(ws1, msg) or not await safe_send(ws2, msg): break
 
-            # Отправка (с проверкой на вылет)
-            if not await send_msg(ws1, msg) or not await send_msg(ws2, msg):
-                logger.warning("Игрок вышел при старте раунда")
-                break
-
-                # Ждем ответы
             answers = await wait_for_queues(q1, q2, ROUND_TIME)
+            ans1, ans2 = answers["p1"], answers["p2"]
 
-            # Проверка на полный дисконнект (None в очереди)
-            ans1 = answers.get("p1")
-            ans2 = answers.get("p2")
-            if ans1 is None or ans2 is None:
-                logger.warning("Игрок отключился во время ожидания ответа")
-                break
+            if ans1 is None and ans2 is None: break
 
-            # Проверка правильности
             correct = str(task.correct_answer).strip().lower()
-            # Если ответ пустая строка ("") -> wrong, если текст -> проверяем
-            res1 = "correct" if ans1 and str(ans1).strip().lower() == correct else "wrong"
-            res2 = "correct" if ans2 and str(ans2).strip().lower() == correct else "wrong"
+            r1 = "correct" if ans1 and str(ans1).strip().lower() == correct else "wrong"
+            r2 = "correct" if ans2 and str(ans2).strip().lower() == correct else "wrong"
 
-            if res1 == "correct": scores[id1] += 1
-            if res2 == "correct": scores[id2] += 1
+            if r1 == "correct": scores[id1] += 1
+            if r2 == "correct": scores[id2] += 1
 
-            # Отправка результатов
-            await send_msg(ws1,
-                           {"type": "round_result", "you": res1, "enemy": res2, "correct_answer": task.correct_answer})
-            await send_msg(ws2,
-                           {"type": "round_result", "you": res2, "enemy": res1, "correct_answer": task.correct_answer})
-
+            await safe_send(ws1,
+                            {"type": "round_result", "you": r1, "enemy": r2, "correct_answer": task.correct_answer})
+            await safe_send(ws2,
+                            {"type": "round_result", "you": r2, "enemy": r1, "correct_answer": task.correct_answer})
             await asyncio.sleep(4)
 
-        # --- ФИНАЛ ---
         s1, s2 = scores[id1], scores[id2]
-        r1, r2 = ("draw", "draw")
+
+        if s1 > s2:
+            sc1, sc2, res1, res2, wid, lid = 1.0, 0.0, "win", "lose", id1, id2
+        elif s2 > s1:
+            sc1, sc2, res1, res2, wid, lid = 0.0, 1.0, "lose", "win", id2, id1
+        else:
+            sc1, sc2, res1, res2, wid, lid = 0.5, 0.5, "draw", "draw", None, None
 
         async with new_session() as session:
-            u1 = await session.get(User, id1)
-            u2 = await session.get(User, id2)
+            res = await session.execute(select(User).where(User.id.in_([id1, id2])))
+            u_map = {u.id: u for u in res.scalars().all()}
+            u1, u2 = u_map.get(id1), u_map.get(id2)
 
-            w_id, l_id = None, None
+            if u1 and u2:
+                u1.rating = calc_new_rating(u1.rating, u2.rating, sc1)
+                u2.rating = calc_new_rating(u2.rating, u1.rating, sc2)
 
-            if s1 > s2:
-                r1, r2 = "win", "lose"
-                w_id, l_id = id1, id2
-                if u1 and u2:
-                    u1.wins += 1;
-                    u1.matches_played += 1
-                    u2.losses += 1;
-                    u2.matches_played += 1
-                    u1.rating, u2.rating = calc_new_rating(u1.rating, u2.rating, 1.0), calc_new_rating(u2.rating,
-                                                                                                       u1.rating, 0.0)
-            elif s2 > s1:
-                r1, r2 = "lose", "win"
-                w_id, l_id = id2, id1
-                if u1 and u2:
-                    u2.wins += 1;
-                    u2.matches_played += 1
-                    u1.losses += 1;
-                    u1.matches_played += 1
-                    u1.rating, u2.rating = calc_new_rating(u1.rating, u2.rating, 0.0), calc_new_rating(u2.rating,
-                                                                                                       u1.rating, 1.0)
-            else:
-                if u1 and u2:
-                    u1.matches_played += 1;
-                    u2.matches_played += 1
-                    u1.rating, u2.rating = calc_new_rating(u1.rating, u2.rating, 0.5), calc_new_rating(u2.rating,
-                                                                                                       u1.rating, 0.5)
+                for u, r_type in [(u1, res1), (u2, res2)]:
+                    u.matches_played += 1
+                    if r_type == "win":
+                        u.wins += 1
+                        await gamification.process_xp(u, 15, session)
+                    elif r_type == "lose":
+                        u.losses += 1
+                        await gamification.process_xp(u, 5, session)
+                    else:
+                        await gamification.process_xp(u, 5, session)
 
-            history = MatchHistory(subject=subject, winner_id=w_id, loser_id=l_id, winner_score=max(s1, s2),
-                                   loser_score=min(s1, s2))
-            session.add(history)
-            await session.commit()
+                session.add(MatchHistory(subject=subject, winner_id=wid, loser_id=lid, winner_score=max(s1, s2),
+                                         loser_score=min(s1, s2)))
+                await session.commit()
 
-            # Отправляем результаты (если игроки еще тут)
-            new_r1 = u1.rating if u1 else 0
-            new_r2 = u2.rating if u2 else 0
-            await send_msg(ws1,
-                           {"type": "game_over", "result": r1, "my_score": s1, "enemy_score": s2, "new_rating": new_r1})
-            await send_msg(ws2,
-                           {"type": "game_over", "result": r2, "my_score": s2, "enemy_score": s1, "new_rating": new_r2})
+                await safe_send(ws1, {"type": "game_over", "result": res1, "my_score": s1, "enemy_score": s2,
+                                      "new_rating": u1.rating})
+                await safe_send(ws2, {"type": "game_over", "result": res2, "my_score": s2, "enemy_score": s1,
+                                      "new_rating": u2.rating})
 
     except Exception as e:
-        logger.error(f"Game Error: {e}")
+        logger.error(f"PvP Error: {e}", exc_info=True)
     finally:
         manager.disconnect(id1)
         manager.disconnect(id2)
-
-
-async def wait_for_queues(q1: asyncio.Queue, q2: asyncio.Queue, timeout: int):
-    start = time.time()
-    res = {"p1": "", "p2": ""}
-    got1, got2 = False, False
-
-    while True:
-        now = time.time()
-        left = (start + timeout) - now
-        if left <= 0: break
-        if got1 and got2: break
-
-        try:
-            if not got1 and not q1.empty():
-                res["p1"] = await q1.get()
-                got1 = True
-            if not got2 and not q2.empty():
-                res["p2"] = await q2.get()
-                got2 = True
-            await asyncio.sleep(0.1)
-        except Exception:
-            break
-    return res

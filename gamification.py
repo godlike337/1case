@@ -2,30 +2,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from models import User, Achievement
 
-# Константы
-XP_PER_LEVEL = 100  # Каждые 100 опыта = новый уровень
+XP_PER_LEVEL = 100
+
 
 async def process_xp(user: User, amount: int, db: AsyncSession):
-    """
-    Начисляет опыт, повышает уровень и проверяет ачивки.
-    Возвращает список новых полученных ачивок (строки).
-    """
     user.xp += amount
-
-    new_level = (user.xp // XP_PER_LEVEL) + 1
-    if new_level > user.level:
-        user.level = new_level
-
+    user.level = (user.xp // XP_PER_LEVEL) + 1
+    existing_ach_names = {ach.name for ach in user.achievements}
     new_unlocked = []
+    checks = [
+        (user.wins >= 1, "Первая кровь"),
+        (user.wins >= 5, "Гладиатор"),
+        (user.level >= 5, "Пятый элемент"),
+    ]
 
-    if user.wins >= 1:
-        await check_and_grant(user, "Первая кровь", db, new_unlocked)
-
-    if user.wins >= 5:
-        await check_and_grant(user, "Гладиатор", db, new_unlocked)
-
-    if user.level >= 5:
-        await check_and_grant(user, "Пятый элемент", db, new_unlocked)
+    for condition, name in checks:
+        if condition and name not in existing_ach_names:
+            result = await db.execute(select(Achievement).where(Achievement.name == name))
+            ach_obj = result.scalar_one_or_none()
+            if ach_obj:
+                user.achievements.append(ach_obj)
+                new_unlocked.append(name)
 
     return new_unlocked
 

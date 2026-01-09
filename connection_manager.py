@@ -7,9 +7,7 @@ from collections import defaultdict
 class ConnectionManager:
     def __init__(self):
         self.waiting_queues: Dict[str, List[int]] = defaultdict(list)
-        # Храним сокеты: { user_id: WebSocket }
         self.active_connections: Dict[int, WebSocket] = {}
-        # Храним очереди сообщений: { user_id: asyncio.Queue }
         self.user_queues: Dict[int, asyncio.Queue] = {}
 
     async def connect(self, websocket: WebSocket, user_id: int):
@@ -23,7 +21,6 @@ class ConnectionManager:
         if user_id in self.user_queues:
             del self.user_queues[user_id]
 
-        # Удаляем из очередей ожидания
         for subject, queue in self.waiting_queues.items():
             if user_id in queue:
                 queue.remove(user_id)
@@ -38,7 +35,6 @@ class ConnectionManager:
     async def find_match(self, user_id: int, subject: str):
         queue = self.waiting_queues[subject]
 
-        # Удаляем себя из очереди если вдруг там зависли
         if user_id in queue:
             queue.remove(user_id)
 
@@ -47,7 +43,6 @@ class ConnectionManager:
             return [user_id, opponent_id]
         else:
             queue.append(user_id)
-            # Отправляем сообщение "Жди"
             ws = self.get_socket(user_id)
             if ws:
                 await ws.send_json({"type": "waiting", "message": "Поиск..."})

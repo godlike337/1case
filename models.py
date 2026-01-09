@@ -1,6 +1,6 @@
 from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import ForeignKey, Table, Column, Integer
+from sqlalchemy import ForeignKey, Table, Column, Integer, JSON
 from database import Base
 
 # Связь юзеров и ачивок
@@ -41,15 +41,16 @@ class User(Base):
 class Task(Base):
     __tablename__ = "tasks"
     id: Mapped[int] = mapped_column(primary_key=True)
+    subject: Mapped[str] = mapped_column(default="python")
+    topic: Mapped[str] = mapped_column(default="General")
     title: Mapped[str] = mapped_column()
     description: Mapped[str] = mapped_column()
     difficulty: Mapped[int] = mapped_column()
+    task_type: Mapped[str] = mapped_column(default="text")
+    options: Mapped[list] = mapped_column(JSON, nullable=True)
     correct_answer: Mapped[str] = mapped_column()
-    subject: Mapped[str] = mapped_column(default="python")
-    # subject можно сделать Enum или отдельной таблицей в будущем, пока оставим строкой для простоты
+    hints: Mapped[list] = mapped_column(JSON, default=list)
 
-
-# --- НОВАЯ ТАБЛИЦА: КТО ЧТО РЕШИЛ ---
 class SolvedTask(Base):
     __tablename__ = "solved_tasks"
     id: Mapped[int] = mapped_column(primary_key=True)

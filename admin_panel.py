@@ -8,18 +8,13 @@ class UserAdmin(ModelView, model=User):
     name_plural = "Пользователи"
     icon = "fa-solid fa-user"
 
-    # Что показывать в таблице (списке)
     column_list = [User.id, User.username, User.role, User.rating, User.wins]
 
-    # Что показывать в форме создания/редактирования
-    # ОБЯЗАТЕЛЬНО добавляем password, чтобы его можно было ввести
     form_columns = [User.username, User.password, User.role, User.rating]
 
-    # --- МАГИЯ: Хеширование перед сохранением ---
     async def on_model_change(self, data, model, is_created, request):
         password = data.get("password")
         if password:
-            # Если пароль был введен, мы его шифруем перед записью в БД
             data["password"] = get_password_hash(password)
         return await super().on_model_change(data, model, is_created, request)
 

@@ -1,6 +1,6 @@
-from typing import List, Optional
 from pydantic import BaseModel, EmailStr
-
+from typing import List, Optional
+from datetime import datetime
 
 class AchievementResponse(BaseModel):
     name: str
@@ -51,15 +51,26 @@ class TaskCreate(BaseModel):
 
 class TaskResponse(BaseModel):
     id: int
+    subject: str
+    topic: str  # <--- НОВОЕ
+    difficulty: int
     title: str
     description: str
-    difficulty: int
-    subject: str
+    task_type: str
+    options: Optional[List[str]] = None
     is_solved: bool = False
+    hints_available: int = 0
 
     class Config:
         from_attributes = True
 
+class HintResponse(BaseModel):
+    hint_text: str
+    hint_number: int
+
+class GenerateRequest(BaseModel):
+    subject: str
+    topic: str
 
 class TaskAttempt(BaseModel):
     user_answer: str
@@ -74,7 +85,7 @@ class UserShort(BaseModel):
 class MatchHistoryResponse(BaseModel):
     id: int
     subject: str
-    played_at: str
+    played_at: datetime
     winner_score: int
     loser_score: int
     winner: Optional[UserShort]
