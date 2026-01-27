@@ -76,8 +76,8 @@
                 </div>
             </div>
 
-            <button class="btn-secondary" style="margin-top: 15px; font-size: 12px;" @click="openHistory">📜 История</button>
-            <button class="btn-secondary" style="margin-top: 15px; font-size: 12px;" @click="openAnalytics">📊 Аналитика</button>
+            <button class="btn-secondary" style="margin-top: 15px; font-size: 12px;" @click="loadHistory">📜 История</button>
+            <button class="btn-secondary" style="margin-top: 15px; font-size: 12px;" @click="loadAnalytics">📊 Аналитика</button>
         </div>
 
         <!-- ДЕЙСТВИЯ -->
@@ -334,27 +334,55 @@
     </div>
 
     <!-- МОДАЛКИ -->
-    <div v-if="showHistory" class="modal-overlay">
+<!-- 10. МОДАЛКА ИСТОРИИ -->
+    <div v-if="modal.history" class="modal-overlay">
         <div style="max-width: 500px; margin: 0 auto;">
-            <div class="header-bar"><h2>История</h2><button class="btn-secondary btn-small" @click="showHistory = false">X</button></div>
-            <div v-for="m in historyList" :key="m.id" class="modal-item" :class="getMatchClass(m)">
-                <div><b>{{ m.subject }}</b><br><small>{{ new Date(m.played_at).toLocaleDateString() }}</small></div>
-                <div style="text-align: right;"><b>{{ m.winner_score }}:{{ m.loser_score }}</b><br><small>{{ getResultText(m) }}</small></div>
+            <div class="header-bar">
+                <h2>История</h2>
+                <button class="btn-secondary btn-small" @click="modal.history = false">X</button>
+            </div>
+
+            <div v-for="m in history" :key="m.id" class="task-list-item"
+                 :style="{borderLeft: '4px solid ' + (getMyResult(m)==='win'?'#00b894':(getMyResult(m)==='lose'?'#ff7675':'#fdcb6e'))}">
+                <div>
+                    <b>{{ m.subject }}</b><br>
+                    <small>{{ new Date(m.played_at).toLocaleDateString() }}</small>
+                </div>
+                <div style="text-align:right">
+                    <b>{{ getScoreText(m) }}</b><br>
+                    <small>{{ getResultText(m) }}</small>
+                </div>
             </div>
         </div>
     </div>
 
-    <div v-if="showAnalytics" class="modal-overlay">
-        <div style="max-width: 600px; margin: 0 auto; background: #1e1e24; padding: 20px; border-radius: 12px;">
-            <div class="header-bar"><h2>📊 Аналитика</h2><button class="btn-secondary btn-small" @click="showAnalytics = false">X</button></div>
+    <!-- 11. МОДАЛКА АНАЛИТИКИ -->
+    <div v-if="modal.analytics" class="modal-overlay">
+        <div class="modal-content">
+            <div class="header-bar">
+                <h2>📊 Аналитика</h2>
+                <button class="btn-secondary btn-small" @click="modal.analytics = false">X</button>
+            </div>
+
             <div v-if="analyticsData" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                <div class="card" style="text-align:center;margin:0;"><div style="font-size:36px;color:#00b894;">{{ analyticsData.win_rate }}%</div><small>Win Rate</small></div>
-                <div class="card" style="text-align:center;margin:0;"><div style="font-size:36px;color:#6c5ce7;">{{ analyticsData.total_solved_training }}</div><small>Задач</small></div>
+                <div class="card" style="text-align:center;margin:0;">
+                    <div style="font-size:36px;color:#00b894;">{{ analyticsData.win_rate }}%</div>
+                    <small>Win Rate</small>
+                </div>
+                <div class="card" style="text-align:center;margin:0;">
+                    <div style="font-size:36px;color:#6c5ce7;">{{ analyticsData.total_solved_training }}</div>
+                    <small>Задач</small>
+                </div>
                 <div class="card" style="grid-column: span 2; margin:0;">
                     <h4>По предметам</h4>
                     <div v-for="(s, k) in analyticsData.subject_stats" :key="k" style="margin-bottom:10px;">
-                        <div style="display:flex;justify-content:space-between;"><span>{{ k }}</span><span>{{ Math.round(s.wins/s.total*100) }}%</span></div>
-                        <div style="height:6px;background:#333;border-radius:3px;"><div :style="{width: (s.wins/s.total*100)+'%', background:'#0984e3', height:'100%'}"></div></div>
+                        <div style="display:flex;justify-content:space-between;">
+                            <span>{{ k }}</span>
+                            <span>{{ Math.round(s.wins/s.total*100) }}%</span>
+                        </div>
+                        <div style="height:6px;background:#333;border-radius:3px;">
+                            <div :style="{width: (s.wins/s.total*100)+'%', background:'#0984e3', height:'100%'}"></div>
+                        </div>
                     </div>
                 </div>
             </div>

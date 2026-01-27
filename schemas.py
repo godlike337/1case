@@ -87,9 +87,9 @@ class MatchHistoryResponse(BaseModel):
     id: int
     subject: str
     played_at: datetime
-    winner_score: int
-    loser_score: int
-    winner: Optional[UserShort]
-    loser: Optional[UserShort]
+    p1_score: int
+    p2_score: int
+    player1: Optional[UserShort]
+    player2: Optional[UserShort]
 
     class Config: from_attributes = True

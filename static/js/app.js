@@ -45,9 +45,12 @@ createApp({
             nextRoundTimer: 0,
 
             // --- МОДАЛКИ ---
-            showHistory: false,
-            historyList: [],
-            showAnalytics: false,
+            modal: {
+                history: false,
+                analytics: false
+            },
+
+            history: [],
             analyticsData: null,
 
             // --- ТЕХНИЧЕСКОЕ ---
@@ -303,35 +306,67 @@ createApp({
             this.clearTimers();
             this.state = 'finished';
             this.finalData = d;
-            this.fetchStats(); // Обновляем рейтинг
+            this.fetchStats();
         },
 
         // ===========================================
         // 5. ИСТОРИЯ И АНАЛИТИКА
         // ===========================================
-        async openHistory() {
+        async loadHistory() {
             try {
-                this.historyList = await Api.getHistory(this.token);
-                this.showHistory = true;
-            } catch { alert("Не удалось загрузить историю"); }
-        },
-        async openAnalytics() {
-            try {
-                this.analyticsData = await Api.getAnalytics(this.token);
-                this.showAnalytics = true;
-            } catch { alert("Не удалось загрузить аналитику"); }
+                this.history = await Api.getHistory(this.token);
+                this.modal.history = true;
+            } catch  {
+                alert("Не удалось загрузить историю: " );
+            }
         },
 
-        // Хелперы для стилизации истории
-        getMatchClass(m) {
-            if (m.winner && m.winner.username === this.userStats.username) return 'h-win';
-            if (m.loser && m.loser.username === this.userStats.username) return 'h-lose';
-            return 'h-draw';
+        async loadAnalytics() {
+            try {
+                this.analyticsData = await Api.getAnalytics(this.token);
+                this.modal.analytics = true;
+            } catch  {
+                alert("Не удалось загрузить аналитику: " );
+            }
         },
+
+        getMyResult(m) {
+            if (!this.user || !this.user.username) return 'draw';
+
+            const myName = this.user.username;
+            let myScore = 0, enemyScore = 0;
+
+            if (m.player1 && m.player1.username === myName) {
+                myScore = m.p1_score;
+                enemyScore = m.p2_score;
+            } else if (m.player2 && m.player2.username === myName) {
+                myScore = m.p2_score;
+                enemyScore = m.p1_score;
+            } else {
+                return 'draw';
+            }
+
+            if (myScore > enemyScore) return 'win';
+            if (myScore < enemyScore) return 'lose';
+            return 'draw';
+        },
+
         getResultText(m) {
-            if (m.winner && m.winner.username === this.userStats.username) return 'ПОБЕДА';
-            if (m.loser && m.loser.username === this.userStats.username) return 'ПОРАЖЕНИЕ';
+            const res = this.getMyResult(m);
+            if (res === 'win') return 'ПОБЕДА';
+            if (res === 'lose') return 'ПОРАЖЕНИЕ';
             return 'НИЧЬЯ';
+        },
+
+        getScoreText(m) {
+            if (!this.user) return `${m.p1_score}:${m.p2_score}`;
+            const myName = this.user.username;
+
+            if (m.player1 && m.player1.username === myName) {
+                return `${m.p1_score} : ${m.p2_score}`;
+            } else {
+                return `${m.p2_score} : ${m.p1_score}`;
+            }
         }
     }
 }).mount('#app');

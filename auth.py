@@ -131,13 +131,13 @@ async def get_my_history(
 ):
     query = select(MatchHistory).where(
         or_(
-            MatchHistory.winner_id == current_user.id,
-            MatchHistory.loser_id == current_user.id
+            MatchHistory.p1_id == current_user.id,
+            MatchHistory.p2_id == current_user.id
         )
     ).options(
-        selectinload(MatchHistory.winner),
-        selectinload(MatchHistory.loser)
-    ).order_by(MatchHistory.played_at.desc())  # Сначала новые
+        selectinload(MatchHistory.player1),
+        selectinload(MatchHistory.player2)
+    ).order_by(MatchHistory.played_at.desc())
 
     result = await db.execute(query)
     return result.scalars().all()

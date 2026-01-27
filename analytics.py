@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from rsa.pkcs1_v2 import mgf1
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, func
 from database import get_db
@@ -23,20 +24,24 @@ async def get_my_analytics(
         user: User = Depends(get_current_user)
 ):
     matches_res = await db.execute(
-        select(MatchHistory).where(or_(MatchHistory.winner_id == user.id, MatchHistory.loser_id == user.id)))
+        select(MatchHistory).where(or_(MatchHistory.p1_id == user.id, MatchHistory.p2_id == user.id)))
     matches = matches_res.scalars().all()
 
     wins = 0
     subject_data = {}
 
     for m in matches:
-        is_winner = (m.winner_id == user.id)
-        if is_winner: wins += 1
+        if m.p1_id == user.id:
+            my_score = m.p1_score
+            enemy_score = m.p2_score
+        else:
+            my_score = m.p2_score
+            enemy_score = m.p1_score
 
         subj = m.subject
         if subj not in subject_data: subject_data[subj] = {"wins": 0, "total": 0}
         subject_data[subj]["total"] += 1
-        if is_winner: subject_data[subj]["wins"] += 1
+        if my_score > enemy_score: subject_data[subj]["wins"] += 1
 
     stmt = (
         select(SolvedTask.topic, func.count(SolvedTask.id))

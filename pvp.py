@@ -234,7 +234,7 @@ async def run_pvp_game(id1: int, id2: int, subject: str):
         elif s2 > s1:
             sc1, sc2, res1, res2, wid, lid = 0.0, 1.0, "lose", "win", id2, id1
         else:
-            sc1, sc2, res1, res2, wid, lid = 0.5, 0.5, "draw", "draw", id2, id1
+            sc1, sc2, res1, res2, wid, lid = 0.5, 0.5, "draw", "draw", None, None
 
         async with new_session() as session:
             res = await session.execute(select(User).where(User.id.in_([id1, id2])))
@@ -256,8 +256,7 @@ async def run_pvp_game(id1: int, id2: int, subject: str):
                     else:
                         await gamification.process_xp(u, 10, session)
 
-                session.add(MatchHistory(subject=subject, winner_id=wid, loser_id=lid, winner_score=max(s1, s2),
-                                         loser_score=min(s1, s2)))
+                session.add(MatchHistory(subject=subject, p1_id=id1, p2_id=id2, p1_score=s1, p2_score=s2))
                 await session.commit()
 
                 await safe_send(ws1, {"type": "game_over", "result": res1, "my_score": s1, "enemy_score": s2,

@@ -38,8 +38,8 @@ class MatchHistoryAdmin(ModelView, model=MatchHistory):
     name = "История матча"
     name_plural = "История матчей"
     icon = "fa-solid fa-clock-rotate-left"
-    column_list = [MatchHistory.id, MatchHistory.subject, "winner.username", MatchHistory.winner_score,
-                   "loser.username", MatchHistory.loser_score]
+    column_list = [MatchHistory.id, MatchHistory.subject, MatchHistory.player1, MatchHistory.p1_score,
+                   MatchHistory.player2, MatchHistory.p2_score]
     can_create = False
     can_edit = False
     can_delete = True
