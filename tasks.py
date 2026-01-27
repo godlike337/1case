@@ -19,7 +19,12 @@ async def generate_training_task(
         db: AsyncSession = Depends(get_db),
         current_user: User = Depends(get_current_user)
 ):
-    ai_data = await ai_service.generate_task(req.subject, req.topic)
+    ai_data = await ai_service.generate_task(
+        req.subject, req.topic, current_user.grade, req.difficulty
+    )
+
+    if not ai_data:
+        raise HTTPException(status_code=503, detail="ИИ не смог придумать задачу. Попробуйте другую тему.")
 
     new_task = Task(
         subject=req.subject, topic=req.topic,
@@ -33,13 +38,13 @@ async def generate_training_task(
     await db.refresh(new_task)
 
     resp = TaskResponse.model_validate(new_task)
-    resp.hints_available = len(new_task.hints) if new_task.hints else 0
+    resp.hints_available = len(new_task.hints)
     return resp
 
 @router.get("/{task_id}/hint", response_model=HintResponse)
 async def get_hint(
         task_id: int,
-        hint_number: int = Query(..., ge=1),  # 1, 2...
+        hint_number: int = Query(..., ge=1),
         db: AsyncSession = Depends(get_db),
         current_user: User = Depends(get_current_user)
 ):
@@ -86,7 +91,14 @@ async def solve_task(
         if check.scalar_one_or_none():
             return {"status": "correct", "message": "Верно! (Уже решено)"}
 
-        db.add(SolvedTask(user_id=current_user.id, task_id=task_id))
+        new_solved = SolvedTask(
+            user_id=current_user.id,
+            task_id=task_id,
+            subject=task.subject,
+            topic=task.topic
+        )
+        db.add(new_solved)
+
         await gamification.process_xp(current_user, 10 * task.difficulty, db)  # XP зависит от сложности!
         await db.commit()
         return {"status": "correct", "message": f"Верно! +{10 * task.difficulty} XP"}

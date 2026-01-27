@@ -4,10 +4,11 @@ from starlette.responses import FileResponse # <--- ИМПОРТ
 from contextlib import asynccontextmanager
 
 from sqladmin import Admin, ModelView
-from database import engine, Base, get_db
+from database import engine, Base, get_db, new_session
 import auth
 import tasks
 import pvp
+import analytics
 from admin_panel import UserAdmin, TaskAdmin, MatchHistoryAdmin
 from starlette.middleware.sessions import SessionMiddleware
 from admin_auth import AdminAuth
@@ -22,7 +23,13 @@ async def lifespan(app: FastAPI):
     async with new_session() as db:
         await auth.create_initial_admin_user(db)
         await auth.create_initial_achievements(db)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
+    async for db_session in get_db():
+        await auth.create_initial_admin_user(db_session)
+        await auth.create_initial_achievements(db_session)
+        break
     print("--- СЕРВЕР ЗАПУЩЕН, БАЗА ГОТОВА ---")
     yield
 
@@ -31,19 +38,6 @@ class AchievementAdmin(ModelView, model=Achievement):
     name_plural = "Достижения"
     icon = "fa-solid fa-trophy"
     column_list = [Achievement.name, Achievement.description, Achievement.icon]
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    async for db_session in get_db():
-        await auth.create_initial_admin_user(db_session)
-        await auth.create_initial_achievements(db_session)  # <--- СОЗДАЕМ АЧИВКИ
-        break
-    yield
-
 
 app = FastAPI(lifespan=lifespan, title="Платформа для олимпиад")
 
@@ -55,12 +49,12 @@ async def read_index():
 
 app.add_middleware(
     SessionMiddleware,
-    secret_key="SECRET_KEY_FOR_COOKIES_123",
+    secret_key="SECRET_KEY_123",
     max_age=3600,
     https_only=False,
     same_site="lax"
 )
-authentication_backend = AdminAuth(secret_key="SECRET_KEY_FOR_COOKIES_123")
+authentication_backend = AdminAuth(secret_key="SECRET_KEY_123")
 
 admin = Admin(
     app,
@@ -76,3 +70,4 @@ admin.add_view(AchievementAdmin)
 app.include_router(auth.router)
 app.include_router(tasks.router)
 app.include_router(pvp.router)
+app.include_router(analytics.router)

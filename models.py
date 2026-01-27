@@ -3,7 +3,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import ForeignKey, Table, Column, Integer, JSON
 from database import Base
 
-# Связь юзеров и ачивок
 user_achievements = Table(
     "user_achievements", Base.metadata,
     Column("user_id", Integer, ForeignKey("users.id"), primary_key=True),
@@ -27,7 +26,7 @@ class User(Base):
     password: Mapped[str] = mapped_column()
     role: Mapped[str] = mapped_column(default="user")
 
-    # Геймификация
+    grade: Mapped[int] = mapped_column(default=0)
     xp: Mapped[int] = mapped_column(default=0)
     level: Mapped[int] = mapped_column(default=1)
     rating: Mapped[int] = mapped_column(default=1000)
@@ -51,11 +50,15 @@ class Task(Base):
     correct_answer: Mapped[str] = mapped_column()
     hints: Mapped[list] = mapped_column(JSON, default=list)
 
+
 class SolvedTask(Base):
     __tablename__ = "solved_tasks"
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"))
+    subject: Mapped[str] = mapped_column(default="python")
+    topic: Mapped[str] = mapped_column(default="General")
+
     solved_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
 

@@ -3,190 +3,365 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Olympus Platform</title>
+    <title>Olympus AI Platform</title>
+
+    <!-- Шрифты и Иконки -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
-    <!-- Подключаем наш CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- KaTeX (Математика) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+
+    <!-- Твой CSS -->
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
 
-<!-- Атрибут v-cloak нужен, чтобы скрыть {{ }} до загрузки JS -->
 <div id="app" class="app" v-cloak>
 
-    <!-- 1. АВТОРИЗАЦИЯ -->
+    <!-- ========================================== -->
+    <!-- 1. АВТОРИЗАЦИЯ                             -->
+    <!-- ========================================== -->
     <div v-if="!token">
-        <h1 style="text-align: center; margin-bottom: 20px;">🚀 OLYMPUS</h1>
+        <h1 class="logo-text" style="text-align: center; font-size: 32px; margin-bottom: 20px;">🚀 OLYMPUS AI</h1>
         <div class="card">
-            <h3 style="margin-top: 0;">Вход</h3>
+            <h3 style="margin-top: 0;">Вход / Регистрация</h3>
             <input v-model="authForm.username" placeholder="Логин">
-            <input v-model="authForm.email" placeholder="Email (для регистрации)">
-            <input v-model="authForm.password" type="password" placeholder="Пароль" @keyup.enter="login">
+            <input v-model="authForm.email" placeholder="Email">
+            <input v-model="authForm.password" type="password" placeholder="Пароль">
+
+            <div style="margin: 10px 0;">
+                <label style="font-size: 12px; color: #888;">Ваш класс (1-11):</label>
+                <select v-model.number="authForm.grade" style="width: 100%; padding: 10px; background: #2b2b36; color: white; border: 1px solid #444; border-radius: 8px;">
+                    <option v-for="n in 11" :value="n" :key="n">{{ n }} класс</option>
+                </select>
+            </div>
+
             <button @click="login">Войти</button>
             <button class="btn-secondary" @click="register">Регистрация</button>
         </div>
     </div>
 
-    <!-- 2. МЕНЮ -->
+    <!-- ========================================== -->
+    <!-- 2. ГЛАВНОЕ МЕНЮ                            -->
+    <!-- ========================================== -->
     <div v-else-if="state === 'menu'">
         <div class="header-bar">
-            <span style="font-size: 18px;">👤 {{ userStats.username }}</span>
+            <span>👤 {{ userStats.username }} <small>({{ userStats.grade }} кл)</small></span>
             <button class="btn-secondary btn-small" @click="logout">Выйти</button>
         </div>
 
-        <div class="card">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <h3 style="margin: 0;">Уровень {{ userStats.level || 1 }}</h3>
-                <span style="color: #00b894; font-weight: bold;">{{ userStats.rating || 1000 }} MMR</span>
+        <!-- ПРОФИЛЬ -->
+        <div class="card profile-card">
+            <div style="display: flex; justify-content: space-between;">
+                <span class="level-badge" style="background: #fdcb6e; color: #222; padding: 4px 8px; border-radius: 6px; font-weight: bold;">
+                    {{ userStats.level }} Lvl
+                </span>
+                <span class="xp-text" style="color: #888; font-size: 12px;">XP: {{ userStats.xp }}/100</span>
+            </div>
+            <div class="xp-bar" style="height: 8px; background: #333; margin: 10px 0; border-radius: 4px; overflow: hidden;">
+                <div class="xp-fill" :style="{width: (userStats.xp % 100) + '%', background: '#00b894', height: '100%'}"></div>
             </div>
 
-            <div class="xp-bar">
-                <div class="xp-fill" :style="{width: (userStats.xp % 100) + '%'}"></div>
-            </div>
-            <div style="font-size: 12px; color: #888; margin-bottom: 15px;">XP: {{ userStats.xp || 0 }} / 100</div>
-
-            <div class="achievement-row" v-if="userStats.achievements && userStats.achievements.length">
-                <div v-for="ach in userStats.achievements" :key="ach.name" class="ach-badge" :title="ach.name + ': ' + ach.description">
-                    {{ ach.icon }}
+            <div class="stats-grid" style="display: flex; gap: 10px; margin-top: 15px;">
+                <div style="flex: 1; text-align: center; background: #2b2b36; padding: 10px; border-radius: 8px;">
+                    <div style="font-size: 20px; font-weight: bold; color: #00b894;">{{ userStats.rating }}</div>
+                    <div style="font-size: 10px; color: #888;">MMR</div>
                 </div>
-            </div>
-            <div v-else style="font-size: 12px; color: #666; font-style: italic;">Нет достижений... пока что.</div>
-
-            <div style="margin-top: 15px; display: flex; gap: 10px;">
-                <div style="text-align: center; flex: 1;">
-                    <div style="font-weight: bold; font-size: 18px;">{{ userStats.wins }}</div>
+                <div style="flex: 1; text-align: center; background: #2b2b36; padding: 10px; border-radius: 8px;">
+                    <div style="font-size: 20px; font-weight: bold;">{{ userStats.wins }}</div>
                     <div style="font-size: 10px; color: #888;">ПОБЕД</div>
                 </div>
-                <div style="text-align: center; flex: 1;">
-                    <div style="font-weight: bold; font-size: 18px;">{{ userStats.matches_played }}</div>
-                    <div style="font-size: 10px; color: #888;">ИГР</div>
-                </div>
             </div>
-            <button class="btn-secondary" style="margin-top: 15px; font-size: 12px;" @click="openHistory">📜 История матчей</button>
+
+            <button class="btn-secondary" style="margin-top: 15px; font-size: 12px;" @click="openHistory">📜 История</button>
+            <button class="btn-secondary" style="margin-top: 15px; font-size: 12px;" @click="openAnalytics">📊 Аналитика</button>
         </div>
 
-        <div class="card" style="border-color: #6c5ce7;">
-            <h3 style="color: #a29bfe;">⚔️ В бой</h3>
-            <label style="font-size: 12px; color: #888; font-weight: bold;">ВЫБЕРИ ПРЕДМЕТ</label>
-            <select v-model="subject">
-                <option value="python">🐍 Python</option>
-                <option value="math">📐 Математика</option>
-            </select>
+        <!-- ДЕЙСТВИЯ -->
+        <div class="card action-card" style="border-color: #6c5ce7;">
+            <h3 style="color: #a29bfe; margin-top: 0;">🎯 Режимы</h3>
+            <div class="subject-select" style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <label style="flex: 1; cursor: pointer;">
+                    <input type="radio" value="python" v-model="subject" style="display:none;">
+                    <span :style="subject==='python' ? 'background: #6c5ce7; border-color: #6c5ce7;' : 'background: #2b2b36;'"
+                          style="display: block; text-align: center; padding: 12px; border-radius: 8px; border: 1px solid #444; transition: 0.2s;">
+                        🐍 Python
+                    </span>
+                </label>
+                <label style="flex: 1; cursor: pointer;">
+                    <input type="radio" value="math" v-model="subject" style="display:none;">
+                    <span :style="subject==='math' ? 'background: #6c5ce7; border-color: #6c5ce7;' : 'background: #2b2b36;'"
+                          style="display: block; text-align: center; padding: 12px; border-radius: 8px; border: 1px solid #444; transition: 0.2s;">
+                        📐 Math
+                    </span>
+                </label>
+            </div>
 
-            <button @click="startSearch">⚔️ PvP Битва</button>
-            <button class="btn-secondary" @click="openTraining">🎓 Тренировка</button>
+            <button @click="openTopicSelection" style="background: linear-gradient(135deg, #00b894, #00cec9); margin-bottom: 10px;">
+                🎓 Тренировка с ИИ
+            </button>
+            <button @click="startSearch" style="background: linear-gradient(135deg, #6c5ce7, #a29bfe); margin-bottom: 10px;">
+                ⚔️ PvP Битва
+            </button>
+             <button class="btn-secondary" @click="openCatalog">
+                📂 Каталог задач
+            </button>
         </div>
     </div>
 
-    <!-- 3. ПОИСК PVP -->
+    <!-- ========================================== -->
+    <!-- 3. КАТАЛОГ                                 -->
+    <!-- ========================================== -->
+    <div v-else-if="state === 'catalog'">
+        <div class="header-bar">
+            <h3>Каталог: {{ subject.toUpperCase() }}</h3>
+            <button class="btn-secondary btn-small" @click="state='menu'">Назад</button>
+        </div>
+
+        <div v-if="trainingTasks.length === 0" style="text-align: center; padding: 20px; color: #666;">
+            Каталог пуст. Сгенерируйте задачи в Тренировке!
+        </div>
+
+        <div v-for="t in trainingTasks" :key="t.id" @click="openTaskManual(t)"
+             style="background: #2d2d35; padding: 15px; margin-bottom: 10px; border-radius: 10px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <div style="font-weight: bold; display: flex; align-items: center; gap: 10px;">
+                    {{ t.title }} <span v-if="t.is_solved" style="color: #00b894;">✅</span>
+                </div>
+                <div style="font-size: 12px; color: #888; margin-top: 5px;">
+                    {{ t.topic }} •
+                    <span style="color: #fdcb6e;"><i class="fas fa-star" v-for="n in t.difficulty"></i></span>
+                </div>
+            </div>
+            <div style="color: #666;">➜</div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- 4. ВЫБОР ТЕМЫ (AI)                         -->
+    <!-- ========================================== -->
+    <div v-else-if="state === 'topic_select'">
+        <div class="header-bar">
+            <h3>Темы: {{ subject }}</h3>
+            <button class="btn-secondary btn-small" @click="state='menu'">Назад</button>
+        </div>
+
+        <!-- Слайдер сложности -->
+        <div class="card" style="margin-bottom: 20px;">
+            <label style="font-weight: bold; display: block; margin-bottom: 10px;">
+                Желаемая сложность: {{ selectedDifficulty }}/5
+            </label>
+            <input type="range" min="1" max="5" v-model.number="selectedDifficulty" style="width: 100%;">
+            <div style="display: flex; justify-content: space-between; font-size: 10px; color: #888;">
+                <span>Легко</span><span>Нормально</span><span>Хардкор</span>
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div v-for="topic in currentTopics" :key="topic.id"
+                 @click="selectTopic(topic.id)"
+                 style="background: #2d2d35; padding: 20px; border-radius: 12px; text-align: center; cursor: pointer; border: 1px solid #444;">
+                <div style="font-size: 32px; margin-bottom: 8px;">{{ topic.icon }}</div>
+                <div style="font-weight: 600; font-size: 14px;">{{ topic.name }}</div>
+            </div>
+        </div>
+        <div v-if="!currentTopics.length" style="text-align: center; margin-top: 20px; color: #666;">
+            Нет тем для вашего класса.
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- 5. ЗАГРУЗКА ИИ                             -->
+    <!-- ========================================== -->
+    <div v-else-if="state === 'loading_ai'" style="text-align: center; padding-top: 50px;">
+        <div class="brain-anim" style="font-size: 80px; margin-bottom: 20px;">🧠</div>
+        <h2>ИИ думает...</h2>
+        <p style="color: #888;">Подбираем задачу для {{ userStats.grade }} класса</p>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- 6. РЕШЕНИЕ ЗАДАЧИ (ЭТОТ БЛОК БЫЛ СЛОМАН)   -->
+    <!-- ========================================== -->
+    <div v-else-if="state === 'training_solve'">
+        <div class="header-bar">
+            <span style="background: #fdcb6e; color: #222; padding: 4px 8px; border-radius: 4px; font-weight: bold;">
+                Сложность: {{ activeTask.difficulty }}⭐
+            </span>
+            <button class="btn-secondary btn-small" @click="state === 'catalog' ? state='catalog' : openTopicSelection()">Назад</button>
+        </div>
+
+        <div class="card">
+            <h2 style="margin-top: 0;">{{ activeTask.title }}</h2>
+            <p style="color: #b2bec3; line-height: 1.6; white-space: pre-wrap;">{{ activeTask.description }}</p>
+        </div>
+
+        <!-- ВАРИАНТЫ ОТВЕТА (ЕСЛИ TYPE CHOICE) -->
+        <div v-if="activeTask.task_type === 'choice'" style="display: grid; gap: 10px;">
+            <button v-for="opt in activeTask.options"
+                    :key="opt"
+                    @click="submitTrainingAnswer(opt)"
+                    :disabled="solveResult === 'correct'"
+                    style="background: #2d2d35; border: 1px solid #555; text-align: left; padding: 15px;">
+                {{ opt }}
+            </button>
+        </div>
+
+        <!-- ВВОД ОТВЕТА (ЕСЛИ TYPE TEXT) -->
+        <div v-else>
+            <input v-model="trainingAnswer" placeholder="Введите ваш код или ответ..." @keyup.enter="submitTrainingAnswer()">
+            <button @click="submitTrainingAnswer()">Проверить</button>
+        </div>
+
+        <!-- РЕЗУЛЬТАТ -->
+        <div v-if="solveResult"
+             style="margin-top: 20px; padding: 15px; border-radius: 8px; font-weight: bold; text-align: center;"
+             :class="solveResult === 'correct' ? 'win-text' : 'lose-text'"
+             :style="solveResult === 'correct' ? 'background: rgba(0, 184, 148, 0.1);' : 'background: rgba(255, 118, 117, 0.1);'">
+            {{ solveResult === 'correct' ? '✅ Верно! +XP' : '❌ Неверно' }}
+        </div>
+
+        <!-- ПОДСКАЗКИ -->
+        <div class="hints-section" v-if="activeTask.hints_available > 0">
+            <hr style="border: 0; border-top: 1px solid #333; margin: 20px 0;">
+
+            <div v-for="(hint, idx) in revealedHints" :key="idx"
+                 style="background: rgba(253, 203, 110, 0.1); border: 1px solid #fdcb6e; color: #fdcb6e; padding: 10px; border-radius: 8px; margin-bottom: 10px;">
+                💡 <span v-html="hint"></span>
+            </div>
+
+            <button v-if="revealedHints.length < activeTask.hints_available"
+                    @click="useHint"
+                    class="btn-secondary"
+                    style="width: 100%; border-style: dashed; color: #888;"
+                    :disabled="isHintLoading || solveResult === 'correct'">
+                {{ isHintLoading ? 'Загрузка...' : `🔍 Взять подсказку (${revealedHints.length}/${activeTask.hints_available})` }}
+            </button>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- 7. ПОИСК PVP                               -->
+    <!-- ========================================== -->
     <div v-else-if="state === 'searching'" style="text-align: center; margin-top: 80px;">
-        <div class="searching-anim">📡</div>
+        <div class="searching-anim" style="font-size: 60px;">📡</div>
         <h2>Поиск соперника...</h2>
-        <p style="color: #888;">{{ subject }}</p>
+        <p style="color: #888;">{{ subject.toUpperCase() }} ({{ userStats.grade }}±1 класс)</p>
         <button class="btn-secondary" style="width: 200px;" @click="reset">Отмена</button>
     </div>
 
-    <!-- 4. PVP ИГРА -->
+    <!-- ========================================== -->
+    <!-- 8. VS EKRAN                                -->
+    <!-- ========================================== -->
+    <div v-else-if="state === 'vs'" class="vs-container">
+        <div class="vs-card">
+            <div class="vs-avatar">👤</div>
+            <div class="vs-name">{{ userStats.username }}</div>
+            <div class="vs-rating">{{ userStats.rating }}</div>
+        </div>
+        <div class="vs-center">
+            <div class="vs-logo">VS</div>
+            <div class="vs-timer">{{ vsTimer }}</div>
+        </div>
+        <div class="vs-card">
+            <div class="vs-avatar">👤</div>
+            <div class="vs-name">{{ opponentName }}</div>
+            <div class="vs-rating">{{ opponentRating }}</div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- 9. PVP ИГРА                                -->
+    <!-- ========================================== -->
     <div v-else-if="state === 'playing'">
         <div class="header-bar">
             <div class="score-box" :style="{borderColor: myScore > enemyScore ? '#00b894' : '#444'}">Вы: {{ myScore }}</div>
             <div style="color: #888; font-size: 12px;">РАУНД {{ currentRound }}/{{ totalRounds }}</div>
             <div class="score-box" :style="{borderColor: enemyScore > myScore ? '#d63031' : '#444'}">Враг: {{ enemyScore }}</div>
         </div>
-        <div class="timer-big" :style="{color: timeLeft < 5 ? '#ff7675' : '#fdcb6e'}">{{ timeLeft }}</div>
+
+        <div class="timer-big" :style="{color: timeLeft !== '∞' && timeLeft < 15 ? '#ff7675' : '#fdcb6e'}">
+            {{ timeLeft }}
+        </div>
+
         <div class="card">
-            <h3 style="margin: 0 0 10px 0;">{{ task.title }}</h3>
-            <p style="line-height: 1.6; color: #b2bec3;">{{ task.desc }}</p>
+            <div style="display: flex; justify-content: space-between;">
+                <h3 style="margin: 0;">{{ task.title }}</h3>
+                <span style="color: #fdcb6e;"><i class="fas fa-star" v-for="n in task.difficulty"></i></span>
+            </div>
+            <p style="color: #b2bec3;">{{ task.desc }}</p>
         </div>
+
         <div v-if="!roundFinished">
-            <input id="pvpInput" v-model="answer" placeholder="Ответ..." autocomplete="off" @keyup.enter="sendPvPAnswer" :disabled="answerSent">
-            <button @click="sendPvPAnswer" :disabled="answerSent" :style="{background: answerSent ? '#2d3436' : ''}">{{ answerSent ? '⏳ Ожидание...' : 'ОТВЕТИТЬ' }}</button>
+            <div v-if="task.task_type === 'choice' && task.options" style="display: grid; gap: 10px;">
+                <button v-for="opt in task.options" :key="opt" @click="answer=opt; sendPvPAnswer()"
+                        class="choice-btn" :disabled="answerSent"
+                        style="background: #2d2d35; border: 1px solid #555; text-align: left; padding: 15px;">
+                    {{ opt }}
+                </button>
+            </div>
+            <div v-else>
+                <input id="pvpInput" v-model="answer" placeholder="Ответ..." @keyup.enter="sendPvPAnswer" :disabled="answerSent">
+                <button @click="sendPvPAnswer" :disabled="answerSent" :style="{background: answerSent ? '#2d3436' : ''}">
+                    {{ answerSent ? '⏳ Ждем...' : 'ОТВЕТИТЬ' }}
+                </button>
+            </div>
         </div>
+
         <div v-else class="card" style="text-align: center;">
-            <h2 v-if="roundResult.you === 'correct'" class="win-text">✅ Верно!</h2>
-            <h2 v-else class="lose-text">❌ Ошибка ({{ roundResult.correct }})</h2>
-            <div style="margin-top: 10px; font-size: 12px; color: #888;">Следующий раунд через {{ nextRoundTimer.toFixed(1) }}с</div>
+            <h2 :class="roundResult.you === 'correct' ? 'win-text' : 'lose-text'">
+                {{ roundResult.you === 'correct' ? '✅ Верно!' : '❌ Ошибка' }}
+            </h2>
+            <div style="margin-top: 5px; color: #888;">Правильно: {{ roundResult.correct }}</div>
+            <div class="next-round-bar" style="margin-top: 15px; height: 4px; background: #333;">
+                <div class="next-round-progress" :style="{width: (nextRoundTimer / 4 * 100) + '%', background: '#6c5ce7', height: '100%'}"></div>
+            </div>
         </div>
     </div>
 
-    <!-- 5. PVP ФИНАЛ -->
+    <!-- ========================================== -->
+    <!-- 10. ФИНАЛ                                  -->
+    <!-- ========================================== -->
     <div v-else-if="state === 'finished'" style="text-align: center; padding-top: 50px;">
-        <h1 v-if="finalData.result === 'win'" class="win-text">🏆 ПОБЕДА!</h1>
-        <h1 v-else-if="finalData.result === 'lose'" class="lose-text">💀 ПОРАЖЕНИЕ</h1>
-        <h1 v-else class="draw-text">🤝 НИЧЬЯ</h1>
-        <h2>{{ myScore }} : {{ enemyScore }}</h2>
-        <p v-if="finalData.new_rating" style="color: #fdcb6e;">Ваш рейтинг: {{ finalData.new_rating }}</p>
+        <h1 :class="finalData.result === 'win' ? 'win-text' : (finalData.result === 'lose' ? 'lose-text' : 'draw-text')">
+            {{ finalData.result === 'win' ? '🏆 ПОБЕДА!' : (finalData.result === 'lose' ? '💀 ПОРАЖЕНИЕ' : '🤝 НИЧЬЯ') }}
+        </h1>
+        <h2 style="font-size: 48px; margin: 20px 0;">{{ myScore }} : {{ enemyScore }}</h2>
+        <p v-if="finalData.new_rating" style="color: #fdcb6e;">Новый рейтинг: {{ finalData.new_rating }}</p>
         <button @click="reset">В МЕНЮ</button>
     </div>
 
-<!-- 6. ТРЕНИРОВКА СПИСОК -->
-    <div v-else-if="state === 'training_list'">
-        <div class="header-bar">
-            <h2>Каталог</h2>
-            <button class="btn-secondary btn-small" @click="state = 'menu'">Назад</button>
-        </div>
-
-        <div v-if="trainingTasks.length === 0" style="text-align: center; color: #666; margin-top: 30px;">
-            Нет задач по этому предмету.
-        </div>
-
-        <div v-for="t in trainingTasks" :key="t.id" class="task-list-item" @click="openTask(t)">
-            <div>
-                <div style="font-weight: bold; display: flex; align-items: center;">
-                    {{ t.title }}
-                    <!-- Галочка (защита от дюпа) -->
-                    <span v-if="t.is_solved" class="solved-badge" style="margin-left: 10px; font-size: 12px; color: #00b894;">
-                        ✅
-                    </span>
-                </div>
-                <div style="font-size: 12px; color: #888; margin-top: 4px;">
-                    Сложность: {{ t.difficulty }}
-                </div>
-            </div>
-            <span style="color: #666;">➜</span>
-        </div>
-    </div>
-
-    <!-- 7. ТРЕНИРОВКА РЕШЕНИЕ -->
-    <div v-else-if="state === 'training_solve'">
-        <div class="card">
-            <span style="font-size: 12px; color: #a29bfe; font-weight: bold;">ТРЕНИРОВКА</span>
-            <h2>{{ activeTask.title }}</h2>
-            <p style="color: #ccc;">{{ activeTask.description }}</p>
-        </div>
-        <div class="card">
-            <input v-model="trainingAnswer" placeholder="Ваш ответ..." @keyup.enter="checkTrainingAnswer">
-            <button @click="checkTrainingAnswer">Проверить</button>
-            <div v-if="solveResult" style="margin-top: 10px; font-weight: bold;" :class="solveResult === 'correct' ? 'win-text' : 'lose-text'">
-                {{ solveResult === 'correct' ? '✅ Верно! +XP' : '❌ Неверно' }}
-            </div>
-        </div>
-        <button class="btn-secondary" @click="openTraining">К списку</button>
-    </div>
-
-    <!-- 8. ИСТОРИЯ -->
-    <div v-if="showHistory" class="history-modal">
+    <!-- МОДАЛКИ -->
+    <div v-if="showHistory" class="modal-overlay">
         <div style="max-width: 500px; margin: 0 auto;">
-            <div class="header-bar">
-                <h2 style="margin: 0;">История</h2>
-                <button class="btn-secondary btn-small" @click="showHistory = false">X</button>
+            <div class="header-bar"><h2>История</h2><button class="btn-secondary btn-small" @click="showHistory = false">X</button></div>
+            <div v-for="m in historyList" :key="m.id" class="modal-item" :class="getMatchClass(m)">
+                <div><b>{{ m.subject }}</b><br><small>{{ new Date(m.played_at).toLocaleDateString() }}</small></div>
+                <div style="text-align: right;"><b>{{ m.winner_score }}:{{ m.loser_score }}</b><br><small>{{ getResultText(m) }}</small></div>
             </div>
-            <div v-for="match in historyList" :key="match.id" class="history-item" :class="getMatchClass(match)">
-                <div>
-                    <div style="font-weight: bold;">{{ match.subject.toUpperCase() }}</div>
-                    <div style="font-size: 12px; color: #888;">{{ new Date(match.played_at).toLocaleDateString() }}</div>
-                </div>
-                <div style="text-align: right;">
-                    <div style="font-weight: bold;">{{ getScoreText(match) }}</div>
-                    <div style="font-size: 12px;">{{ getResultText(match) }}</div>
+        </div>
+    </div>
+
+    <div v-if="showAnalytics" class="modal-overlay">
+        <div style="max-width: 600px; margin: 0 auto; background: #1e1e24; padding: 20px; border-radius: 12px;">
+            <div class="header-bar"><h2>📊 Аналитика</h2><button class="btn-secondary btn-small" @click="showAnalytics = false">X</button></div>
+            <div v-if="analyticsData" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div class="card" style="text-align:center;margin:0;"><div style="font-size:36px;color:#00b894;">{{ analyticsData.win_rate }}%</div><small>Win Rate</small></div>
+                <div class="card" style="text-align:center;margin:0;"><div style="font-size:36px;color:#6c5ce7;">{{ analyticsData.total_solved_training }}</div><small>Задач</small></div>
+                <div class="card" style="grid-column: span 2; margin:0;">
+                    <h4>По предметам</h4>
+                    <div v-for="(s, k) in analyticsData.subject_stats" :key="k" style="margin-bottom:10px;">
+                        <div style="display:flex;justify-content:space-between;"><span>{{ k }}</span><span>{{ Math.round(s.wins/s.total*100) }}%</span></div>
+                        <div style="height:6px;background:#333;border-radius:3px;"><div :style="{width: (s.wins/s.total*100)+'%', background:'#0984e3', height:'100%'}"></div></div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
 </div>
-
-<!-- ПОДКЛЮЧАЕМ СКРИПТ МОДУЛЕМ -->
-<script type="module" src="/static/js/app.js"></script>
-
+<script type="module" src="/static/js/app.js?v=FIX_TRAINING_FINAL"></script>
 </body>
 </html>

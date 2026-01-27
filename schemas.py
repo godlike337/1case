@@ -13,16 +13,16 @@ class AchievementResponse(BaseModel):
 
 class UserCreate(BaseModel):
     username: str
-    email: str  # <--- NEW
+    email: str
     password: str
-
+    grade: int
 
 class UserResponse(BaseModel):
     id: int
     username: str
     email: Optional[str] = None
     role: str
-
+    grade: int
     rating: int
     xp: int
     level: int
@@ -52,7 +52,7 @@ class TaskCreate(BaseModel):
 class TaskResponse(BaseModel):
     id: int
     subject: str
-    topic: str  # <--- НОВОЕ
+    topic: str
     difficulty: int
     title: str
     description: str
@@ -71,6 +71,7 @@ class HintResponse(BaseModel):
 class GenerateRequest(BaseModel):
     subject: str
     topic: str
+    difficulty: int
 
 class TaskAttempt(BaseModel):
     user_answer: str

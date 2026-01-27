@@ -2,7 +2,7 @@ import asyncio
 import logging
 import random
 import time
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query
+from fastapi import APIRouter, WebSocket, Query, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from jose import jwt, JWTError
@@ -19,7 +19,8 @@ logger = logging.getLogger("PvP")
 router = APIRouter()
 
 ROUNDS_COUNT = 3
-ROUND_TIME = 20
+MAX_ROUND_TIME_LIMIT = 1800
+
 
 async def get_user_from_token(token: str, db: AsyncSession):
     try:
@@ -46,23 +47,6 @@ def calc_new_rating(rating_a: int, rating_b: int, actual_score: float):
     return int(rating_a + k * (actual_score - expected_a))
 
 
-async def wait_for_queues(q1: asyncio.Queue, q2: asyncio.Queue, timeout: int):
-    async def get_from_q(q):
-        return await q.get()
-
-    task1 = asyncio.create_task(get_from_q(q1))
-    task2 = asyncio.create_task(get_from_q(q2))
-
-    done, pending = await asyncio.wait([task1, task2], timeout=timeout)
-
-    for task in pending: task.cancel()
-
-    return {
-        "p1": task1.result() if task1 in done else None,
-        "p2": task2.result() if task2 in done else None
-    }
-
-
 async def socket_reader(ws: WebSocket, queue: asyncio.Queue):
     try:
         while True:
@@ -72,6 +56,52 @@ async def socket_reader(ws: WebSocket, queue: asyncio.Queue):
                 await queue.put(str(answer).strip())
     except Exception:
         await queue.put(None)
+
+
+async def wait_with_pressure(q1: asyncio.Queue, q2: asyncio.Queue, ws1: WebSocket, ws2: WebSocket, pressure_time: int):
+    async def get_task(q, name):
+        val = await q.get()
+        return name, val
+
+    t1 = asyncio.create_task(get_task(q1, "p1"))
+    t2 = asyncio.create_task(get_task(q2, "p2"))
+    pending = {t1, t2}
+    results = {"p1": None, "p2": None}
+
+    done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED, timeout=MAX_ROUND_TIME_LIMIT)
+
+    if not done:
+        for t in pending: t.cancel()
+        return results
+
+    first_task = list(done)[0]
+    player_key, answer = first_task.result()
+    results[player_key] = answer
+
+    if answer is None:
+        for t in pending: t.cancel()
+        return results
+
+    slow_ws = ws2 if player_key == "p1" else ws1
+
+    if not await safe_send(slow_ws, {
+        "type": "pressure_timer",
+        "seconds": pressure_time,
+        "message": f"Время!"
+    }):
+
+        for t in pending: t.cancel()
+        return results
+
+    if pending:
+        done_2, pending_2 = await asyncio.wait(pending, timeout=pressure_time)
+        if done_2:
+            player_key_2, answer_2 = list(done_2)[0].result()
+            results[player_key_2] = answer_2
+        else:
+            for t in pending: t.cancel()
+
+    return results
 
 
 @router.websocket("/ws/pvp")
@@ -86,22 +116,22 @@ async def websocket_endpoint(
     if not user: await websocket.close(code=1008); return
 
     user_id = user.id
-    logger.info(f"Игрок {user.username} (ID: {user.id}) подключился.")
+    user_grade = user.grade
 
     await manager.connect(websocket, user_id)
     my_queue = asyncio.Queue()
     manager.user_queues[user_id] = my_queue
-
     reader_task = asyncio.create_task(socket_reader(websocket, my_queue))
 
     try:
-        players_ids = await manager.find_match(user_id, subject)
+        players_ids = await manager.find_match(user_id, user_grade, subject)
         if players_ids:
             p1_id, p2_id = players_ids
             asyncio.create_task(run_pvp_game(p1_id, p2_id, subject))
+
         await reader_task
     except Exception as e:
-        logger.error(f"Error socket {user_id}: {e}")
+        logger.error(f"WS Error: {e}")
     finally:
         reader_task.cancel()
         manager.disconnect(user_id)
@@ -113,66 +143,98 @@ async def run_pvp_game(id1: int, id2: int, subject: str):
 
     if not ws1 or not ws2: return
 
-    name1, name2 = "Player 1", "Player 2"
     scores = {id1: 0, id2: 0}
+    disconnected_id = None
 
     try:
         async with new_session() as session:
             res = await session.execute(select(User).where(User.id.in_([id1, id2])))
-            users = {u.id: u for u in res.scalars().all()}
-            if users.get(id1): name1 = users[id1].username
-            if users.get(id2): name2 = users[id2].username
+            u_map = {u.id: u for u in res.scalars().all()}
+            if u_map.get(id1): name1 = u_map[id1].username
+            if u_map.get(id2): name2 = u_map[id2].username
 
             t_res = await session.execute(select(Task).where(Task.subject == subject))
             all_tasks = t_res.scalars().all()
 
         if not all_tasks:
-            await safe_send(ws1, {"type": "error", "message": "Нет задач"})
-            await safe_send(ws2, {"type": "error", "message": "Нет задач"})
+            err = {"type": "error", "message": "Нет задач"}
+            await safe_send(ws1, err)
+            await safe_send(ws2, err)
             return
 
-        game_tasks = random.sample(all_tasks, k=min(len(all_tasks), ROUNDS_COUNT))
+        count = min(len(all_tasks), ROUNDS_COUNT)
+        game_tasks = random.sample(all_tasks, k=count)
 
-        await safe_send(ws1, {"type": "match_found", "opponent": name2, "time": 5})
-        await safe_send(ws2, {"type": "match_found", "opponent": name1, "time": 5})
-        await asyncio.sleep(5)
+        if not await safe_send(ws1, {"type": "match_found", "opponent": u_map[id2].username, "time": 5}):
+            disconnected_id = id1
+        elif not await safe_send(ws2, {"type": "match_found", "opponent": u_map[id1].username, "time": 5}):
+            disconnected_id = id2
+
+        if not disconnected_id:
+            await asyncio.sleep(5)
 
         for i, task in enumerate(game_tasks):
             while not q1.empty(): q1.get_nowait()
             while not q2.empty(): q2.get_nowait()
 
+            current_pressure = 30 + (task.difficulty * 10)
+
             msg = {
-                "type": "round_start", "round": i + 1, "total": len(game_tasks),
-                "title": task.title, "desc": task.description, "time": ROUND_TIME
+                "type": "round_start",
+                "round": i + 1, "total": count,
+                "title": task.title, "desc": task.description,
+                "difficulty": task.difficulty,
+                "time": None,
+                "task_type": task.task_type,
+                "options": task.options
             }
-            if not await safe_send(ws1, msg) or not await safe_send(ws2, msg): break
+            if not await safe_send(ws1, msg): disconnected_id = id1; break
+            if not await safe_send(ws2, msg): disconnected_id = id2; break
 
-            answers = await wait_for_queues(q1, q2, ROUND_TIME)
+            answers = await wait_with_pressure(q1, q2, ws1, ws2, current_pressure)
+
             ans1, ans2 = answers["p1"], answers["p2"]
+            if ans1 is None: disconnected_id = id1; break
+            if ans2 is None: disconnected_id = id2; break
 
-            if ans1 is None and ans2 is None: break
+            def normalize(s):
+                return str(s).strip().lower().replace(" ", "")
 
-            correct = str(task.correct_answer).strip().lower()
-            r1 = "correct" if ans1 and str(ans1).strip().lower() == correct else "wrong"
-            r2 = "correct" if ans2 and str(ans2).strip().lower() == correct else "wrong"
+            corr = normalize(task.correct_answer)
+
+            r1 = "correct" if ans1 and normalize(ans1) == corr else "wrong"
+            r2 = "correct" if ans2 and normalize(ans2) == corr else "wrong"
 
             if r1 == "correct": scores[id1] += 1
             if r2 == "correct": scores[id2] += 1
 
-            await safe_send(ws1,
-                            {"type": "round_result", "you": r1, "enemy": r2, "correct_answer": task.correct_answer})
-            await safe_send(ws2,
-                            {"type": "round_result", "you": r2, "enemy": r1, "correct_answer": task.correct_answer})
+            if not await safe_send(ws1, {"type": "round_result", "you": r1, "enemy": r2,
+                                         "correct_answer": task.correct_answer}):
+                disconnected_id = id1;
+                break
+            if not await safe_send(ws2, {"type": "round_result", "you": r2, "enemy": r1,
+                                         "correct_answer": task.correct_answer}):
+                disconnected_id = id2;
+                break
+
             await asyncio.sleep(4)
 
-        s1, s2 = scores[id1], scores[id2]
+        if disconnected_id:
+            logger.info(f"Матч отменен. Игрок {disconnected_id} отключился.")
+            survivor_ws = ws2 if disconnected_id == id1 else ws1
+            await safe_send(survivor_ws, {
+                "type": "error",
+                "message": "Соперник отключился. Матч аннулирован."
+            })
+            return
 
+        s1, s2 = scores[id1], scores[id2]
         if s1 > s2:
             sc1, sc2, res1, res2, wid, lid = 1.0, 0.0, "win", "lose", id1, id2
         elif s2 > s1:
             sc1, sc2, res1, res2, wid, lid = 0.0, 1.0, "lose", "win", id2, id1
         else:
-            sc1, sc2, res1, res2, wid, lid = 0.5, 0.5, "draw", "draw", None, None
+            sc1, sc2, res1, res2, wid, lid = 0.5, 0.5, "draw", "draw", id2, id1
 
         async with new_session() as session:
             res = await session.execute(select(User).where(User.id.in_([id1, id2])))
@@ -183,16 +245,16 @@ async def run_pvp_game(id1: int, id2: int, subject: str):
                 u1.rating = calc_new_rating(u1.rating, u2.rating, sc1)
                 u2.rating = calc_new_rating(u2.rating, u1.rating, sc2)
 
-                for u, r_type in [(u1, res1), (u2, res2)]:
+                for u, r in [(u1, res1), (u2, res2)]:
                     u.matches_played += 1
-                    if r_type == "win":
+                    if r == "win":
                         u.wins += 1
-                        await gamification.process_xp(u, 15, session)
-                    elif r_type == "lose":
+                        await gamification.process_xp(u, 25, session)
+                    elif r == "lose":
                         u.losses += 1
                         await gamification.process_xp(u, 5, session)
                     else:
-                        await gamification.process_xp(u, 5, session)
+                        await gamification.process_xp(u, 10, session)
 
                 session.add(MatchHistory(subject=subject, winner_id=wid, loser_id=lid, winner_score=max(s1, s2),
                                          loser_score=min(s1, s2)))
@@ -204,7 +266,7 @@ async def run_pvp_game(id1: int, id2: int, subject: str):
                                       "new_rating": u2.rating})
 
     except Exception as e:
-        logger.error(f"PvP Error: {e}", exc_info=True)
+        logger.error(f"PvP Fatal: {e}", exc_info=True)
     finally:
         manager.disconnect(id1)
         manager.disconnect(id2)
