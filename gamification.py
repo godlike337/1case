@@ -27,7 +27,6 @@ async def process_xp(user: User, amount: int, db: AsyncSession):
     return new_unlocked
 
 async def check_and_grant(user: User, achievement_name: str, db: AsyncSession, log_list: list):
-    """Выдает ачивку, если её еще нет"""
     for ach in user.achievements:
         if ach.name == achievement_name:
             return
