@@ -1,77 +1,102 @@
 import os
 import json
-import aiohttp
+import logging
 from pydantic import BaseModel
 from typing import List, Optional
+
+from google import genai
+from google.genai import types
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("AI_Client")
+
 GOOGLE_API_KEY = "AIzaSyDsj6b818_aNRxE75GH4eULx4U245Wm_HA"
-PROXY_URL = "http://zTw70a:nfwsgb@185.71.214.48:8000"
-API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GOOGLE_API_KEY}"
 
 
 class AI_Task_Schema(BaseModel):
     title: str
     description: str
     difficulty: int
-    task_type: str
+    task_type: str  # "choice" или "text"
     options: Optional[List[str]] = None
     correct_answer: str
     hints: List[str]
 
 
 class AIService:
-    async def generate_task(self, subject: str, topic: str) -> AI_Task_Schema:
-        payload = {
-            "contents": [{
-                "parts": [{
-                    "text": f"""
-                    Ты — строгий тренер олимпиадной сборной.
-                    Сгенерируй СЛОЖНУЮ задачу по предмету "{subject}" на тему "{topic}".
+    def __init__(self):
+        # Инициализируем клиента при старте сервера.
+        # http_options=None означает, что мы идем напрямую, без прокси.
+        self.client = genai.Client(api_key=GOOGLE_API_KEY)
 
-                    Требования:
-                    1. Уровень сложности: Высокий (Олимпиада/Профильный экзамен).
-                    2. Избегай банальных примеров типа "2+2" или "print('hello')".
-                    3. Задача должна требовать логического мышления или знания нюансов синтаксиса.
-                    4. Если это программирование — дай кусок кода с подвохом.
-                    5. Избегай ответов текстом(из за автоматической проверки; давай инструкции как записать ответ правильно)
+    async def generate_task(self, subject: str, topic: str, grade: int, difficulty: int) -> Optional[AI_Task_Schema]:
+        """
+        Генерирует задачу, обращаясь к Google Gemini асинхронно.
+        """
 
-                    Верни ТОЛЬКО JSON:
-                    {{
-                        "title": "Интригующий заголовок",
-                        "description": "Полное условие задачи (можно с кодом)",
-                        "difficulty": 4 (ставь от 3 до 5),
-                        "task_type": "choice" (тест) или "text" (ввод ответа),
-                        "options": ["Вариант A", "Вариант B", "Вариант C", "Вариант D"] (если choice, иначе null),
-                        "correct_answer": "Текст правильного ответа (не цифра варианта, а само значение!)",
-                        "hints": ["Наводящая подсказка 1", "Почти ответ 2"]
-                    }}
-                    """
-                }]
-            }],
-            "generationConfig": {"response_mime_type": "application/json", "temperature": 0.8}
-        }
+        # 1. Формируем Промпт (Задание для нейросети)
+        # Мы четко описываем роль, контекст и требуемый формат JSON.
+        prompt = f"""
+        Ты — профессиональный методист и учитель олимпиадной подготовки.
+
+        Контекст:
+        - Ученик: {grade} класс.
+        - Предмет: {subject}.
+        - Тема: {topic}.
+        - Желаемая сложность: {difficulty} из 5.
+
+        Твоя задача:
+        Сгенерируй ОДНУ уникальную задачу.
+
+        Требования:
+        1. Уровень должен соответствовать олимпиаде для {grade} класса.
+        2. Не используй банальные примеры. Задача должна заставлять думать.
+        3. ВАЖНО: Все математические формулы, степени и дроби пиши в формате LaTeX, обрамляя их знаком доллара. 
+        4. Если task_type="choice", дай 4 варианта в options.
+        5. Если task_type="text", убедись, что ответ можно записать коротко (числом или словом)(НЕ ДАВАЙ ОТВЕТЫ В ФОРМАТЕ LaTeX).
+
+        Верни ответ СТРОГО в формате JSON, соответствующем этой схеме:
+        {{
+            "title": "Короткий заголовок",
+            "description": "Текст условия",
+            "difficulty": {difficulty},
+            "task_type": "choice" или "text",
+            "options": ["A", "B", "C", "D"] (или null, если text),
+            "correct_answer": "Правильный ответ",
+            "hints": ["Подсказка 1", "Подсказка 2"]
+        }}
+        """
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(API_URL, json=payload, proxy=PROXY_URL) as response:
-                    if response.status != 200:
-                        raise Exception(f"Google Error {response.status}")
-
-                    result = await response.json()
-                    raw_text = result['candidates'][0]['content']['parts'][0]['text']
-                    data = json.loads(raw_text)
-
-                    validated = AI_Task_Schema(**data)
-                    # Гарантируем, что подсказок не больше 2
-                    if validated.hints and len(validated.hints) > 2:
-                        validated.hints = validated.hints[:2]
-                    return validated
-
-        except Exception as e:
-            print(f"🔴 AI Error: {e}")
-            return AI_Task_Schema(
-                title="Сбой ИИ", description="Попробуйте еще раз...", difficulty=1,
-                task_type="text", correct_answer="0", hints=[], options=None
+            # 2. Отправляем запрос к Gemini
+            # client.aio — это асинхронный интерфейс (важно для FastAPI, чтобы не блокировать сервер)
+            response = await self.client.aio.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type='application/json',  # Требуем JSON на уровне протокола
+                )
             )
 
+            # 3. Обрабатываем ответ
+            # response.text содержит "сырую" строку JSON, которую вернул ИИ
+            raw_json = response.text
 
+            # Превращаем строку в словарь Python
+            data = json.loads(raw_json)
+
+            # Прогоняем через Pydantic для валидации типов
+            validated_task = AI_Task_Schema(**data)
+
+
+            logger.info(f"✅ Задача сгенерирована: {validated_task.title}")
+            return validated_task
+
+        except Exception as e:
+            # Если что-то пошло не так (нет интернета, ключ неверный, ИИ вернул бред)
+            logger.error(f"🔴 Ошибка генерации (Gemini): {e}")
+            return None  # Возвращаем None, чтобы tasks.py знал об ошибке
+
+
+# Создаем единственный экземпляр сервиса
 ai_service = AIService()
