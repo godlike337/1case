@@ -1,5 +1,6 @@
-body { background: #0f0f13; color: #ecf0f1; font-family: 'Inter', sans-serif; margin: 0; display: flex; justify-content: center; min-height: 100vh; }
-.app { width: 100%; max-width: 500px; padding: 20px; }
+body { background: #00003E; color: #ecf0f1; font-family: 'Inter', sans-serif; margin: 0; display: flex; justify-content: normal; min-height: 100vh; }
+.app { width: 100%; max-width: 1500px; padding: 20px; }
+.cap { width: 100%; background-color: #2d2d35; height: 5%; padding: 0px; }
 .card { background: #1e1e24; padding: 20px; border-radius: 16px; margin-bottom: 20px; border: 1px solid #2d2d35; }
 input, select { width: 100%; padding: 15px; background: #2b2b36; border: 1px solid #444; color: white; border-radius: 10px; margin-bottom: 10px; box-sizing: border-box; }
 button { width: 100%; padding: 15px; background: #6c5ce7; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; margin-top: 5px; }

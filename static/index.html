@@ -3,16 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Olympus AI Platform</title>
+    <title>Olimpics</title>
 
     <!-- Шрифты и Иконки -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <!-- KaTeX (Математика) -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <!--<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
     <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script> -->
 
     <!-- Твой CSS -->
     <link rel="stylesheet" href="/static/css/style.css">
@@ -48,10 +48,11 @@
     <!-- 2. ГЛАВНОЕ МЕНЮ                            -->
     <!-- ========================================== -->
     <div v-else-if="state === 'menu'">
-        <div class="header-bar">
-            <span>👤 {{ userStats.username }} <small>({{ userStats.grade }} кл)</small></span>
-            <button class="btn-secondary btn-small" @click="logout">Выйти</button>
-        </div>
+        <header style="height: 40px" class="cap">
+            <div class="header-bar">
+                👤 {{ userStats.username }}
+            </div>
+        </header>
 
         <!-- ПРОФИЛЬ -->
         <div class="card profile-card">
@@ -350,7 +351,7 @@
                 </div>
                 <div style="text-align:right">
                     <b>{{ getScoreText(m) }}</b><br>
-                    <small>{{ getResultText(m) }}</small>
+                    <small>{{ getMyResult(m) }}</small>
                 </div>
             </div>
         </div>
@@ -372,6 +373,14 @@
                 <div class="card" style="text-align:center;margin:0;">
                     <div style="font-size:36px;color:#6c5ce7;">{{ analyticsData.total_solved_training }}</div>
                     <small>Задач</small>
+                </div>
+                <div class="card" style="text-align:center;margin:0;">
+                    <div style="font-size:36px;color:#6c5ce7;">{{analyticsData.correct_answers}}%</div>
+                    <small>Правильных ответов</small>
+                </div>
+                <div class="card" style="text-align:center;margin:0;">
+                    <div style="font-size:36px;color:#6c5ce7;">{{analyticsData.avg_solving_time}}с</div>
+                    <small>Среднее время решения</small>
                 </div>
                 <div class="card" style="grid-column: span 2; margin:0;">
                     <h4>По предметам</h4>

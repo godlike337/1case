@@ -33,6 +33,9 @@ class User(Base):
     wins: Mapped[int] = mapped_column(default=0)
     losses: Mapped[int] = mapped_column(default=0)
     matches_played: Mapped[int] = mapped_column(default=0)
+    cor_anws: Mapped[int] = mapped_column(default=0)
+    anws: Mapped[int] = mapped_column(default=0)
+    total_time_spent: Mapped[float] = mapped_column(default=0.0)
 
     achievements = relationship("Achievement", secondary=user_achievements, lazy="selectin")
 
@@ -42,6 +45,7 @@ class Task(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     subject: Mapped[str] = mapped_column(default="python")
     topic: Mapped[str] = mapped_column(default="General")
+    grade: Mapped[int] = mapped_column
     title: Mapped[str] = mapped_column()
     description: Mapped[str] = mapped_column()
     difficulty: Mapped[int] = mapped_column()
@@ -65,11 +69,11 @@ class SolvedTask(Base):
 class MatchHistory(Base):
     __tablename__ = "match_history"
     id: Mapped[int] = mapped_column(primary_key=True)
-    winner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=True)
-    loser_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=True)
-    winner = relationship("User", foreign_keys=[winner_id])
-    loser = relationship("User", foreign_keys=[loser_id])
+    p1_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=True)
+    p2_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=True)
+    player1 = relationship("User", foreign_keys=[p1_id])
+    player2 = relationship("User", foreign_keys=[p2_id])
     subject: Mapped[str] = mapped_column()
     played_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    winner_score: Mapped[int] = mapped_column(default=0)
-    loser_score: Mapped[int] = mapped_column(default=0)
+    p1_score: Mapped[int] = mapped_column(default=0)
+    p2_score: Mapped[int] = mapped_column(default=0)

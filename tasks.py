@@ -24,10 +24,10 @@ async def generate_training_task(
     )
 
     if not ai_data:
-        raise HTTPException(status_code=503, detail="ИИ не смог придумать задачу. Попробуйте другую тему.")
+        raise HTTPException(status_code=503, detail="ИИ не смог придумать задачу.")
 
     new_task = Task(
-        subject=req.subject, topic=req.topic,
+        subject=req.subject, topic=req.topic, grade=ai_data.grade,
         title=ai_data.title, description=ai_data.description,
         difficulty=ai_data.difficulty, task_type=ai_data.task_type,
         options=ai_data.options, correct_answer=ai_data.correct_answer,

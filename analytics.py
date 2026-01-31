@@ -5,17 +5,11 @@ from sqlalchemy import select, or_, func
 from database import get_db
 from models import User, MatchHistory, SolvedTask
 from auth import get_current_user
-from pydantic import BaseModel
-from typing import Dict
+from schemas import StatsResponse
+
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
-
-class StatsResponse(BaseModel):
-    total_matches: int
-    win_rate: float
-    total_solved_training: int
-    subject_stats: Dict[str, dict]
 
 
 @router.get("/me", response_model=StatsResponse)
@@ -27,21 +21,7 @@ async def get_my_analytics(
         select(MatchHistory).where(or_(MatchHistory.p1_id == user.id, MatchHistory.p2_id == user.id)))
     matches = matches_res.scalars().all()
 
-    wins = 0
-    subject_data = {}
-
-    for m in matches:
-        if m.p1_id == user.id:
-            my_score = m.p1_score
-            enemy_score = m.p2_score
-        else:
-            my_score = m.p2_score
-            enemy_score = m.p1_score
-
-        subj = m.subject
-        if subj not in subject_data: subject_data[subj] = {"wins": 0, "total": 0}
-        subject_data[subj]["total"] += 1
-        if my_score > enemy_score: subject_data[subj]["wins"] += 1
+    wins = user.wins
 
     stmt = (
         select(SolvedTask.topic, func.count(SolvedTask.id))
@@ -50,14 +30,18 @@ async def get_my_analytics(
     )
     res = await db.execute(stmt)
     topic_stats = {row[0]: row[1] for row in res.all()}
-    if len(matches) > 0:
-        win_rate = (wins/len(matches))*100
-    else:
-        win_rate = 0
+
+    win_rate = (wins / len(matches)) * 100 if len(matches) > 0 else 0
+    correct_answers = (user.cor_anws / user.anws) * 100 if user.anws > 0 else 0
+    avg_time = 0.0
+    if user.anws > 0:
+        avg_time = user.total_time_spent / user.anws
 
     return StatsResponse(
         total_matches=len(matches),
         win_rate=win_rate,
         total_solved_training=sum(topic_stats.values()),
-        subject_stats={"topics": topic_stats}
+        subject_stats={"topics": topic_stats},
+        correct_answers=correct_answers,
+        avg_solving_time=round(avg_time, 2),
     )

@@ -1,6 +1,6 @@
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles # <--- ИМПОРТ
-from starlette.responses import FileResponse # <--- ИМПОРТ
+from fastapi.staticfiles import StaticFiles
+from starlette.responses import FileResponse
 from contextlib import asynccontextmanager
 
 from sqladmin import Admin, ModelView

@@ -1,6 +1,7 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional
 from datetime import datetime
+from typing import Dict
 
 class AchievementResponse(BaseModel):
     name: str
@@ -12,9 +13,9 @@ class AchievementResponse(BaseModel):
 
 
 class UserCreate(BaseModel):
-    username: str
-    email: str
-    password: str
+    username: str =  Field(min_length=3, max_length=20)
+    email: EmailStr
+    password: str = Field(min_length=6)
     grade: int
 
 class UserResponse(BaseModel):
@@ -44,6 +45,7 @@ class Token(BaseModel):
 class TaskCreate(BaseModel):
     title: str
     description: str
+    grade: int
     difficulty: int
     correct_answer: str
     subject: str
@@ -53,6 +55,7 @@ class TaskResponse(BaseModel):
     id: int
     subject: str
     topic: str
+    grade: int
     difficulty: int
     title: str
     description: str
@@ -82,6 +85,13 @@ class UserShort(BaseModel):
 
     class Config: from_attributes = True
 
+class StatsResponse(BaseModel):
+    total_matches: int
+    win_rate: float
+    total_solved_training: int
+    subject_stats: Dict[str, dict]
+    correct_answers: int
+    avg_solving_time: float
 
 class MatchHistoryResponse(BaseModel):
     id: int

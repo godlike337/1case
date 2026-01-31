@@ -1,12 +1,11 @@
 import { createApp } from 'https://unpkg.com/vue@3/dist/vue.esm-browser.js';
-// Добавляем ?v=... чтобы браузер точно обновил кэш
-import * as Api from './api.js?v=final_fix';
-import { TOPICS } from './topics.js?v=final_fix';
+import * as Api from './api.js?v=2';
+import { TOPICS } from './topics.js?v=2';
 
 createApp({
     data() {
         return {
-            // --- АВТОРИЗАЦИЯ ---
+            //auth
             token: localStorage.getItem('olymp_token') || null,
             authForm: { username: '', password: '', email: '', grade: 9 },
             userStats: {
@@ -14,27 +13,27 @@ createApp({
                 wins: 0, grade: 9, achievements: []
             },
 
-            // --- НАВИГАЦИЯ ---
+            //menu
             state: 'menu',
-            subject: 'python', // Текущий предмет
+            subject: 'python',
 
-            // --- ТРЕНИРОВКА (AI & CATALOG) ---
+            //tasks
             trainingTasks: [],
-            activeTask: null, // Текущая открытая задача
+            activeTask: null,
             trainingAnswer: '',
             solveResult: null,
             revealedHints: [],
             isHintLoading: false,
             selectedDifficulty: 1,
 
-            // --- PVP ДАННЫЕ ---
+            //pvp
             ws: null,
             opponentName: '',
             vsTimer: 5,
-            task: { title: '', desc: '', difficulty: 1 }, // Задача PvP
+            task: { title: '', desc: '', difficulty: 1 },
             answer: '',
             answerSent: false,
-            timeLeft: '∞', // Таймер (строка или число)
+            timeLeft: '∞',
             currentRound: 1,
             totalRounds: 3,
             myScore: 0,
@@ -44,7 +43,7 @@ createApp({
             finalData: {},
             nextRoundTimer: 0,
 
-            // --- МОДАЛКИ ---
+            //modals
             modal: {
                 history: false,
                 analytics: false
@@ -53,15 +52,13 @@ createApp({
             history: [],
             analyticsData: null,
 
-            // --- ТЕХНИЧЕСКОЕ ---
+            // tech
             intervals: { vs: null, game: null, next: null }
         }
     },
     computed: {
-        // Фильтруем темы по классу ученика
         currentTopics() {
             const list = TOPICS[this.subject] || [];
-            // Если userStats еще не загрузился, считаем класс = 1
             const userGrade = this.userStats.grade || 1;
             return list.filter(t => userGrade >= t.minGrade);
         }
@@ -70,18 +67,11 @@ createApp({
         if (this.token) this.fetchStats();
     },
     methods: {
-        // ===========================================
-        // 1. УТИЛИТЫ
-        // ===========================================
-
-        // Очистка всех таймеров (чтобы не тикали в фоне)
         clearTimers() {
             Object.values(this.intervals).forEach(clearInterval);
         },
 
-        // ===========================================
-        // 2. АВТОРИЗАЦИЯ
-        // ===========================================
+        // auth
         async fetchStats() {
             try { this.userStats = await Api.getUserStats(this.token); }
             catch { this.logout(); }
@@ -112,10 +102,6 @@ createApp({
             if(this.ws) this.ws.close();
             this.state = 'menu';
         },
-
-        // ===========================================
-        // 3. ТРЕНИРОВКА И ИИ
-        // ===========================================
 
         // Открыть каталог задач
         async openCatalog() {
@@ -331,19 +317,19 @@ createApp({
         },
 
         getMyResult(m) {
-            if (!this.user || !this.user.username) return 'draw';
+            if (!this.userStats || !this.userStats.username) {
+                return 'draw';
+            }
 
-            const myName = this.user.username;
+            const myName = this.userStats.username;
             let myScore = 0, enemyScore = 0;
 
-            if (m.player1 && m.player1.username === myName) {
+            if (m.player1.username === myName) {
                 myScore = m.p1_score;
                 enemyScore = m.p2_score;
-            } else if (m.player2 && m.player2.username === myName) {
+            } else if (m.player2.username === myName) {
                 myScore = m.p2_score;
                 enemyScore = m.p1_score;
-            } else {
-                return 'draw';
             }
 
             if (myScore > enemyScore) return 'win';
@@ -359,8 +345,8 @@ createApp({
         },
 
         getScoreText(m) {
-            if (!this.user) return `${m.p1_score}:${m.p2_score}`;
-            const myName = this.user.username;
+            if (!this.userStats) return `${m.p1_score}:${m.p2_score}`;
+            const myName = this.userStats.username;
 
             if (m.player1 && m.player1.username === myName) {
                 return `${m.p1_score} : ${m.p2_score}`;
