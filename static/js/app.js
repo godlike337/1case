@@ -1,11 +1,12 @@
-import { createApp } from 'https://unpkg.com/vue@3/dist/vue.esm-browser.js';
-import * as Api from './api.js?v=2';
-import { TOPICS } from './topics.js?v=2';
+import { createApp, nextTick } from 'https://unpkg.com/vue@3/dist/vue.esm-browser.js';
+import * as Api from './api.js?v=3';
+import { TOPICS } from './topics.js?v=2'; // Убедитесь, что этот файл существует
 
-createApp({
+
+const app = createApp({
     data() {
         return {
-            //auth
+            // Auth
             token: localStorage.getItem('olymp_token') || null,
             authForm: { username: '', password: '', email: '', grade: 9 },
             userStats: {
@@ -13,346 +14,320 @@ createApp({
                 wins: 0, grade: 9, achievements: []
             },
 
-            //menu
-            state: 'menu',
-            subject: 'python',
+            // Navigation State
+            state: 'login', // login, register, forgot, menu, profile, topic_select, training_solve, pvp_setup, searching, vs, playing, finished
 
-            //tasks
-            trainingTasks: [],
+            // Profile
+            profileTab: 'analytics',
+            history: [],
+            historyPage: 0,
+            analyticsData: null,
+            charts: { winRate: null, topics: null },
+
+            // Training
+            subject: 'python',
+            selectedDifficulty: 1,
             activeTask: null,
-            trainingAnswer: '',
+            currentAnswerInput: '',
             solveResult: null,
             revealedHints: [],
-            isHintLoading: false,
-            selectedDifficulty: 1,
 
-            //pvp
+            // PvP
             ws: null,
             opponentName: '',
+            opponentRating: 0,
             vsTimer: 5,
-            task: { title: '', desc: '', difficulty: 1 },
-            answer: '',
-            answerSent: false,
-            timeLeft: '∞',
-            currentRound: 1,
-            totalRounds: 3,
+            task: {}, // PvP Task
+            timeLeft: 0,
             myScore: 0,
             enemyScore: 0,
             roundFinished: false,
             roundResult: {},
-            finalData: {},
             nextRoundTimer: 0,
-
-            //modals
-            modal: {
-                history: false,
-                analytics: false
-            },
-
-            history: [],
-            analyticsData: null,
-
-            // tech
-            intervals: { vs: null, game: null, next: null }
+            finalData: {},
+            answerSent: false
         }
     },
     computed: {
         currentTopics() {
             const list = TOPICS[this.subject] || [];
-            const userGrade = this.userStats.grade || 1;
-            return list.filter(t => userGrade >= t.minGrade);
+            return list.filter(t => this.userStats.grade >= t.minGrade);
+        },
+        paginatedHistory() {
+            const start = this.historyPage * 5;
+            return this.history.slice(start, start + 5);
         }
     },
-    mounted() {
-        if (this.token) this.fetchStats();
+    watch: {
+        // Следим за состоянием для обновления URL
+        state(newVal) {
+            const path = newVal === 'menu' ? '/' : `/${newVal}`;
+            if (location.pathname !== path) {
+                history.pushState({ state: newVal }, '', path);
+            }
+            // Инициализация графиков при входе в профиль
+            if (newVal === 'profile') {
+                this.loadProfileData();
+            }
+        }
+    },
+    async mounted() {
+        // Обработка кнопки "Назад" в браузере
+        window.onpopstate = (event) => {
+            if (event.state && event.state.state) {
+                this.state = event.state.state;
+            } else {
+                this.state = this.token ? 'menu' : 'login';
+            }
+        };
+
+        // Проверка сессии
+        if (this.token) {
+            try {
+                this.userStats = await Api.getUserStats(this.token);
+                this.state = 'menu';
+            } catch {
+                this.logout();
+            }
+        } else {
+            this.state = 'login';
+        }
     },
     methods: {
-        clearTimers() {
-            Object.values(this.intervals).forEach(clearInterval);
+        // === Навигация ===
+        goTo(newState) {
+            this.state = newState;
         },
 
-        // auth
-        async fetchStats() {
-            try { this.userStats = await Api.getUserStats(this.token); }
-            catch { this.logout(); }
-        },
+        // === Авторизация ===
         async login() {
             try {
                 const d = await Api.loginUser(this.authForm.username, this.authForm.password);
                 this.token = d.access_token;
                 localStorage.setItem('olymp_token', this.token);
-                await this.fetchStats();
-            } catch { alert("Ошибка входа: неверный логин или пароль"); }
+                this.userStats = await Api.getUserStats(this.token);
+                this.goTo('menu');
+            } catch (e) { alert("Ошибка входа"); }
         },
         async register() {
             try {
                 await Api.registerUser(this.authForm);
                 await this.login();
-            } catch { alert("Ошибка регистрации: имя занято"); }
+            } catch (e) { alert("Ошибка регистрации"); }
         },
         logout() {
-            this.clearTimers();
             this.token = null;
             localStorage.removeItem('olymp_token');
             if(this.ws) this.ws.close();
-            this.state = 'menu';
-        },
-        reset() {
-            this.clearTimers();
-            if(this.ws) this.ws.close();
-            this.state = 'menu';
+            this.goTo('login');
         },
 
-        // Открыть каталог задач
-        async openCatalog() {
+        // === Профиль и Графики ===
+        async loadProfileData() {
             try {
-                this.trainingTasks = await Api.getTrainingTasks(this.token, this.subject);
-                this.state = 'catalog';
-            } catch(e) { alert("Не удалось загрузить каталог"); }
+                const [hist, analytics] = await Promise.all([
+                    Api.getHistory(this.token),
+                    Api.getAnalytics(this.token)
+                ]);
+                this.history = hist;
+                this.analyticsData = analytics;
+
+                await nextTick(); // Ждем рендеринга DOM
+                this.renderCharts();
+            } catch (e) { console.error(e); }
         },
 
-        // Открыть задачу из каталога вручную
-        openTaskManual(t) {
-            this.activeTask = t;
-            // В каталоге подсказки недоступны (или можно сделать отдельный запрос)
-            this.activeTask.hints_available = 0;
-            this.trainingAnswer = '';
-            this.solveResult = null;
-            this.revealedHints = [];
-            this.state = 'training_solve';
-        },
+        renderCharts() {
+            // Очистка старых
+            if(this.charts.winRate) this.charts.winRate.destroy();
+            if(this.charts.topics) this.charts.topics.destroy();
 
-        // Экран выбора темы
-        openTopicSelection() {
-            this.state = 'topic_select';
-        },
+            const ad = this.analyticsData;
+            if (!ad) return;
 
-        // Генерация задачи ИИ
-        async selectTopic(topicId) {
-            this.state = 'loading_ai';
-            try {
-                // Передаем токен, предмет, тему и выбранную сложность
-                this.activeTask = await Api.generateAiTask(
-                    this.token,
-                    this.subject,
-                    topicId,
-                    this.selectedDifficulty
-                );
+            // Doughnut Chart (Win/Loss)
+            const ctx1 = document.getElementById('winRateChart');
+            if (ctx1) {
+                const losses = ad.total_matches - this.userStats.wins; // Примерно
+                this.charts.winRate = new Chart(ctx1, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Победы', 'Поражения/Ничьи'],
+                        datasets: [{
+                            data: [this.userStats.wins, losses > 0 ? losses : 0],
+                            backgroundColor: ['#00e5ff', '#ff0055'],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: { plugins: { legend: { display: false } } }
+                });
+            }
 
-                // Сброс полей
-                this.trainingAnswer = '';
-                this.solveResult = null;
-                this.revealedHints = [];
-
-                this.state = 'training_solve';
-
-            } catch (e) {
-                alert(e.message);
-                this.state = 'topic_select';
+            // Bar Chart (Темы)
+            const ctx2 = document.getElementById('topicsChart');
+            if (ctx2 && ad.subject_stats && ad.subject_stats.topics) {
+                const topics = Object.keys(ad.subject_stats.topics);
+                const counts = Object.values(ad.subject_stats.topics);
+                this.charts.topics = new Chart(ctx2, {
+                    type: 'bar',
+                    data: {
+                        labels: topics,
+                        datasets: [{
+                            label: 'Решено задач',
+                            data: counts,
+                            backgroundColor: 'rgba(0, 229, 255, 0.5)',
+                            borderColor: '#00e5ff',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        scales: { y: { beginAtZero: true, grid: { color: '#333' } }, x: { grid: { display: false } } },
+                        plugins: { legend: { display: false } }
+                    }
+                });
             }
         },
 
-        // Отправка ответа (тренировка)
-        async submitTrainingAnswer(ans = null) {
-            const val = ans !== null ? ans : this.trainingAnswer;
-            if (!val) return;
-
-            try {
-                const res = await Api.solveTask(this.token, this.activeTask.id, val);
-                this.solveResult = res.status;
-                if (res.status === 'correct') {
-                    this.fetchStats(); // Обновляем опыт
-                    this.activeTask.is_solved = true;
-                }
-            } catch(e) { alert("Ошибка соединения"); }
+        formatDate(dateStr) {
+            return new Date(dateStr).toLocaleDateString();
         },
-
-        // Взять подсказку
-        async useHint() {
-            if (this.revealedHints.length >= this.activeTask.hints_available) return;
-
-            this.isHintLoading = true;
-            try {
-                const num = this.revealedHints.length + 1;
-                const d = await Api.getHint(this.token, this.activeTask.id, num);
-                this.revealedHints.push(d.hint_text);
-            } catch(e) { alert("Не удалось получить подсказку"); }
-            finally { this.isHintLoading = false; }
-        },
-
-        // ===========================================
-        // 4. PVP (СОКЕТЫ)
-        // ===========================================
-        startSearch() {
-            if (!this.subject) return alert("Выберите предмет");
-
-            this.state = 'searching';
-            this.myScore = 0;
-            this.enemyScore = 0;
-
-            if (this.ws) this.ws.close();
-
-            const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-            const url = `${proto}://${location.host}/ws/pvp?subject=${this.subject}&token=${this.token}`;
-
-            this.ws = new WebSocket(url);
-
-            this.ws.onmessage = (e) => {
-                const d = JSON.parse(e.data);
-                this.handleSocketMessage(d);
-            };
-
-            this.ws.onerror = () => {
-                alert("Ошибка подключения к серверу соревнований");
-                this.reset();
-            };
-        },
-
-        handleSocketMessage(d) {
-            switch(d.type) {
-                case 'match_found': this.handleMatchFound(d); break;
-                case 'round_start': this.startRound(d); break;
-                case 'pressure_timer': this.handlePressure(d); break;
-                case 'round_result': this.showRoundResult(d); break;
-                case 'game_over': this.endGame(d); break;
-                case 'error': alert(d.message); this.reset(); break;
-            }
-        },
-
-        handleMatchFound(d) {
-            this.state = 'vs';
-            this.opponentName = d.opponent;
-            this.opponentRating = d.rating;
-            this.vsTimer = d.time || 5;
-
-            if(this.intervals.vs) clearInterval(this.intervals.vs);
-            this.intervals.vs = setInterval(() => {
-                if(this.vsTimer > 0) this.vsTimer--;
-            }, 1000);
-        },
-
-        startRound(d) {
-            this.clearTimers();
-            this.state = 'playing';
-            this.roundFinished = false;
-            this.answerSent = false;
-            this.answer = '';
-
-            // Сохраняем данные задачи
-            this.task = {
-                title: d.title,
-                desc: d.desc,
-                difficulty: d.difficulty,
-                task_type: d.task_type,
-                options: d.options
-            };
-
-            this.currentRound = d.round;
-            this.totalRounds = d.total;
-            this.timeLeft = '∞'; // Изначально времени нет (ждем первого ответа)
-
-            // Ставим фокус в поле
-            setTimeout(() => document.getElementById('pvpInput')?.focus(), 50);
-
-        },
-
-        handlePressure(d) {
-            // Включаем таймер, когда соперник ответил
-            this.timeLeft = d.seconds;
-
-            if (this.intervals.game) clearInterval(this.intervals.game);
-            this.intervals.game = setInterval(() => {
-                if(typeof this.timeLeft === 'number' && this.timeLeft > 0) {
-                    this.timeLeft--;
-                }
-            }, 1000);
-        },
-
-        sendPvPAnswer() {
-            if(!this.answer || this.answerSent) return;
-            this.ws.send(JSON.stringify({answer: this.answer}));
-            this.answerSent = true;
-        },
-
-        showRoundResult(d) {
-            this.roundFinished = true;
-            this.roundResult = { you: d.you, enemy: d.enemy, correct: d.correct_answer };
-
-            if(d.you === 'correct') this.myScore++;
-            if(d.enemy === 'correct') this.enemyScore++;
-
-            this.nextRoundTimer = 4;
-            this.intervals.next = setInterval(() => {
-                if(this.nextRoundTimer > 0) this.nextRoundTimer -= 0.1;
-            }, 100);
-
-        },
-
-        endGame(d) {
-            this.clearTimers();
-            this.state = 'finished';
-            this.finalData = d;
-            this.fetchStats();
-        },
-
-        // ===========================================
-        // 5. ИСТОРИЯ И АНАЛИТИКА
-        // ===========================================
-        async loadHistory() {
-            try {
-                this.history = await Api.getHistory(this.token);
-                this.modal.history = true;
-            } catch  {
-                alert("Не удалось загрузить историю: " );
-            }
-        },
-
-        async loadAnalytics() {
-            try {
-                this.analyticsData = await Api.getAnalytics(this.token);
-                this.modal.analytics = true;
-            } catch  {
-                alert("Не удалось загрузить аналитику: " );
-            }
-        },
-
-        getMyResult(m) {
-            if (!this.userStats || !this.userStats.username) {
-                return 'draw';
-            }
-
+        getMyResult(match) {
             const myName = this.userStats.username;
+
             let myScore = 0, enemyScore = 0;
-
-            if (m.player1.username === myName) {
-                myScore = m.p1_score;
-                enemyScore = m.p2_score;
-            } else if (m.player2.username === myName) {
-                myScore = m.p2_score;
-                enemyScore = m.p1_score;
+            if (match.player1 && match.player1.username === myName) {
+                myScore = match.p1_score; enemyScore = match.p2_score;
+            } else {
+                myScore = match.p2_score; enemyScore = match.p1_score;
             }
-
             if (myScore > enemyScore) return 'win';
             if (myScore < enemyScore) return 'lose';
             return 'draw';
         },
-
-        getResultText(m) {
-            const res = this.getMyResult(m);
-            if (res === 'win') return 'ПОБЕДА';
-            if (res === 'lose') return 'ПОРАЖЕНИЕ';
-            return 'НИЧЬЯ';
+        getResultText(match) {
+            const res = this.getMyResult(match);
+            return res === 'win' ? 'WIN' : res === 'lose' ? 'LOSE' : 'DRAW';
         },
 
-        getScoreText(m) {
-            if (!this.userStats) return `${m.p1_score}:${m.p2_score}`;
-            const myName = this.userStats.username;
-
-            if (m.player1 && m.player1.username === myName) {
-                return `${m.p1_score} : ${m.p2_score}`;
-            } else {
-                return `${m.p2_score} : ${m.p1_score}`;
+        // === Тренировка ===
+        async selectTopic(topicId) {
+            this.state = 'loading_ai';
+            try {
+                this.activeTask = await Api.generateAiTask(
+                    this.token, this.subject, this.userStats.grade, topicId, this.selectedDifficulty
+                );
+                this.solveResult = null;
+                this.currentAnswerInput = '';
+                this.revealedHints = [];
+                this.state = 'training_solve';
+            } catch (e) {
+                alert("Ошибка генерации: " + e.message);
+                this.state = 'topic_select';
             }
+        },
+
+        async handleAnswer(ans) {
+            if (this.state === 'training_solve') {
+                if (!ans) return;
+                const res = await Api.solveTask(this.token, this.activeTask.id, ans);
+                this.solveResult = res.status;
+                if (res.status === 'correct') {
+                    this.activeTask.is_solved = true;
+                }
+            } else if (this.state === 'playing') {
+                // PvP
+                if (this.answerSent) return;
+                this.ws.send(JSON.stringify({ answer: ans }));
+                this.answerSent = true;
+            }
+        },
+
+        async useHint() {
+            if (this.revealedHints.length >= this.activeTask.hints_available) return;
+            try {
+                const num = this.revealedHints.length + 1;
+                    const d = await Api.getHint(this.token, this.activeTask.id, num);
+                this.revealedHints.push(d.hint_text);
+            } catch(e) {}
+        },
+
+        // === PvP ===
+        reset() {
+            if(this.ws) this.ws.close();
+            this.goTo('menu');
+        },
+
+        startPvP() {
+            this.goTo('searching');
+            const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+            this.ws = new WebSocket(`${proto}://${location.host}/ws/pvp?subject=${this.subject}&token=${this.token}`);
+
+            this.ws.onmessage = (e) => {
+                const d = JSON.parse(e.data);
+                if (d.type === 'match_found') {
+                    this.opponentName = d.opponent;
+                    this.opponentRating = d.rating || '???';
+                    this.vsTimer = d.time || 5;
+                    this.goTo('vs');
+                    const intv = setInterval(() => {
+                        this.vsTimer--;
+                        if(this.vsTimer <= 0) clearInterval(intv);
+                    }, 1000);
+                } else if (d.type === 'round_start') {
+                    this.state = 'playing';
+                    this.task = {
+                        title: d.title, description: d.desc,
+                        difficulty: d.difficulty, task_type: d.task_type, options: d.options
+                    };
+                    this.roundFinished = false;
+                    this.answerSent = false;
+                    this.currentAnswerInput = '';
+                    this.timeLeft = '∞';
+                } else if (d.type === 'pressure_timer') {
+                    this.timeLeft = d.seconds;
+                    // Таймер запускается локально для визуализации
+                    const tInt = setInterval(() => {
+                        if (typeof this.timeLeft === 'number') this.timeLeft--;
+                        if (this.timeLeft <= 0 || this.state !== 'playing') clearInterval(tInt);
+                    }, 1000);
+                } else if (d.type === 'round_result') {
+                    this.roundFinished = true;
+                    this.roundResult = { you: d.you, enemy: d.enemy, correct: d.correct_answer };
+                    if (d.you === 'correct') this.myScore++;
+                    if (d.enemy === 'correct') this.enemyScore++;
+                    this.nextRoundTimer = 4;
+                    const nInt = setInterval(() => {
+                        this.nextRoundTimer -= 0.1;
+                        if(this.nextRoundTimer <= 0) clearInterval(nInt);
+                    }, 100);
+                } else if (d.type === 'game_over') {
+                    this.finalData = d;
+                    this.goTo('finished');
+                    this.ws.close();
+                } else if (d.type === 'error') {
+                    alert(d.message);
+                    this.reset();
+                }
+            };
+        },
+
+        renderMath(text) {
+            // Простой рендер, если MathJax не загрузился или для быстродействия
+            if (!text) return '';
+            return text.replace(/\$(.*?)\$/g, '<i>$1</i>');
         }
     }
-}).mount('#app');
+});
+
+// Глобальная функция для кнопки PvP в меню, так как setup в goTo
+app.config.globalProperties.goTo = function(page) {
+    if (page === 'pvp_setup') {
+        // Упрощаем: сразу старт поиска, или можно сделать экран выбора предмета для пвп
+        this.subject = 'python'; // По дефолту или спросить
+        this.startPvP();
+    } else {
+        this.state = page;
+    }
+}
+
+app.mount('#app');
