@@ -3,27 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Olympics</title>
+    <title>Olimpics</title>
 
-    <!-- Стили -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Шрифты и иконки -->
+    <link rel="stylesheet" href="/static/css/webfonts/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
-    <link rel="icon" href="static/favicon.ico">
-    <!-- Библиотеки -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-    <!-- MathJax для формул (опционально, если нужно рендерить LaTeX) -->
-    <script>
-        window.MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] } };
-    </script>
-    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
-</head>
+    <link rel="icon" href="static/favicon.ico">
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!--Katex-->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script></head>
 <body>
+
+<!-- Эффекты фона -->
+<div class="scanlines"></div>
+<div class="noise"></div>
 
 <div id="app" v-cloak :class="['app-container', state]">
 
     <!-- ================= АВТОРИЗАЦИЯ ================= -->
-    <div v-if="state === 'login' || state === 'register' || state === 'forgot'" class="screen-auth">
+    <div v-if="['login', 'register', 'forgot'].includes(state)" class="screen-auth">
         <div class="auth-card">
             <h1 class="auth-title">OLIMP<span class="accent">ICS</span></h1>
 
@@ -31,16 +34,16 @@
             <form v-if="state === 'login'" @submit.prevent="login">
                 <div class="input-group">
                     <i class="fa-solid fa-user"></i>
-                    <input type="text" v-model="authForm.username" placeholder="Логин" required>
+                    <input type="text" v-model="authForm.username" placeholder="Юзернейм" required>
                 </div>
                 <div class="input-group">
                     <i class="fa-solid fa-lock"></i>
                     <input type="password" v-model="authForm.password" placeholder="Пароль" required>
                 </div>
-                <button type="submit" class="cyber-btn full">ВОЙТИ</button>
+                <button type="submit" class="cyber-btn full">Войти</button>
                 <div class="auth-links">
-                    <a href="#" @click.prevent="goTo('register')">Регистрация</a>
-                    <a href="#" @click.prevent="goTo('forgot')">Забыли пароль?</a>
+                    <a href="#" @click.prevent="goTo('register')">[ Регистрация ]</a>
+                    <a href="#" @click.prevent="goTo('forgot')">[ Забыли пароль? ]</a>
                 </div>
             </form>
 
@@ -48,26 +51,26 @@
             <form v-if="state === 'register'" @submit.prevent="register">
                 <div class="input-group">
                     <i class="fa-solid fa-user"></i>
-                    <input type="text" v-model="authForm.username" placeholder="Логин" required>
+                    <input type="text" v-model="authForm.username" placeholder="Юзернейм" required>
                 </div>
                 <div class="input-group">
                     <i class="fa-solid fa-envelope"></i>
-                    <input type="email" v-model="authForm.email" placeholder="Email" required>
+                    <input type="email" v-model="authForm.email" placeholder="Почта" required>
                 </div>
                 <div class="input-group">
                     <i class="fa-solid fa-graduation-cap"></i>
                     <select v-model.number="authForm.grade" required>
-                        <option disabled value="">Выберите класс</option>
-                        <option v-for="g in 11" :key="g" :value="g">{{ g }} класс</option>
+                        <option disabled value="">Класс</option>
+                        <option v-for="g in 11" :key="g" :value="g">Класс: {{ g }}</option>
                     </select>
                 </div>
                 <div class="input-group">
                     <i class="fa-solid fa-lock"></i>
                     <input type="password" v-model="authForm.password" placeholder="Пароль" required>
                 </div>
-                <button type="submit" class="cyber-btn full">СОЗДАТЬ АККАУНТ</button>
+                <button type="submit" class="cyber-btn full">Создать аккаунт</button>
                 <div class="auth-links">
-                    <a href="#" @click.prevent="goTo('login')">Назад ко входу</a>
+                    <a href="#" @click.prevent="goTo('login')">&lt; Назад</a>
                 </div>
             </form>
 
@@ -75,10 +78,10 @@
             <div v-if="state === 'forgot'" class="forgot-block">
                 <p>Для сброса пароля обратитесь в поддержку:</p>
                 <a href="https://t.me/whosgodlike" target="_blank" class="cyber-btn tg-btn">
-                    <i class="fa-brands fa-telegram"></i> Написать в Support
+                    <i class="fa-brands fa-telegram"></i> Написать в Поддержку
                 </a>
                 <div class="auth-links">
-                    <a href="#" @click.prevent="goTo('login')">Назад</a>
+                    <a href="#" @click.prevent="goTo('login')">&lt; Назад</a>
                 </div>
             </div>
         </div>
@@ -92,10 +95,10 @@
             <div class="user-info">
                 <span class="username">{{ userStats.username }}</span>
                 <span class="badge level">Lvl {{ userStats.level }}</span>
-                <span class="badge rating"><i class="fa-solid fa-trophy"></i> {{ userStats.rating }}</span>
+                <span class="badge rating"> {{ userStats.rating }} elo</span>
             </div>
             <button class="cyber-btn sm" @click="goTo('profile')">
-                <i class="fa-solid fa-user-astronaut"></i> ПРОФИЛЬ
+                <i class="fa-solid fa-id-card"></i> ПРОФИЛЬ
             </button>
         </header>
 
@@ -104,15 +107,13 @@
 
             <!-- МЕНЮ -->
             <div v-if="state === 'menu'" class="screen-menu">
-                <div class="logo-container">
-                    <img src="static/src/logo.png" alt="Project Logo" class="main-logo">
-                </div>
+                <h2 class="auth-title" style="font-size:4.1rem">OLIMP<span class="accent" style="font-size:4.1rem">ICS</span></h2>
                 <div class="menu-buttons">
                     <button class="cyber-btn lg" @click="goTo('topic_select')">
-                        <i class="fa-solid fa-brain"></i> ТРЕНИРОВКА
+                        Тренировка
                     </button>
                     <button class="cyber-btn lg red-glow" @click="goTo('pvp_setup')">
-                        <i class="fa-solid fa-khanda"></i> PvP БИТВА
+                         PVP
                     </button>
                 </div>
             </div>
@@ -120,15 +121,15 @@
             <!-- ПРОФИЛЬ -->
             <div v-if="state === 'profile'" class="screen-profile">
                 <div class="profile-header">
-                    <button class="back-btn" @click="goTo('menu')"><i class="fa-solid fa-arrow-left"></i> Назад</button>
-                    <h2>Профиль</h2>
+                    <button class="back-btn" @click="goTo('menu')"><i class="fa-solid fa-chevron-left"></i> Назад</button>
+                    <h2 class="section-title">Профиль</h2>
                 </div>
 
                 <div class="profile-grid">
-                    <!-- Левая колонка: Статы -->
-                    <div class="profile-card stats-card">
+                    <!-- Левая колонка -->
+                    <div class="profile-card stats-card cyber-border">
                         <div class="avatar-ph">
-                            <i class="fa-solid fa-user-circle"></i>
+                            <i class="fa-solid fa-user-astronaut"></i>
                         </div>
                         <h3>{{ userStats.username }}</h3>
                         <div class="xp-container">
@@ -139,17 +140,17 @@
                             <div class="xp-bar-bg"><div class="xp-bar-fill" :style="{width: (userStats.xp % 100) + '%'}"></div></div>
                         </div>
                         <div class="mini-stats">
-                            <div><span>Побед </span><strong>{{ userStats.wins }}</strong></div>
-                            <div><span>Матчей </span><strong>{{ userStats.matches_played || 0 }}</strong></div>
+                            <div class="stat-row"><span>Побед:</span><strong>{{ userStats.wins }}</strong></div>
+                            <div class="stat-row"><span>Матчей:</span><strong>{{ userStats.matches_played }}</strong></div>
                         </div>
-                        <button class="cyber-btn sm logout" @click="logout">ВЫЙТИ</button>
+                        <button class="cyber-btn sm logout" @click="logout">Выйти из аккаунта</button>
                     </div>
 
-                    <!-- Правая колонка: Аналитика и История -->
-                    <div class="profile-content">
+                    <!-- Правая колонка -->
+                    <div class="profile-content cyber-border">
                         <div class="tabs">
                             <button :class="['tab-btn', {active: profileTab==='analytics'}]" @click="profileTab='analytics'">Аналитика</button>
-                            <button :class="['tab-btn', {active: profileTab==='history'}]" @click="profileTab='history'">История матчей</button>
+                            <button :class="['tab-btn', {active: profileTab==='history'}]" @click="profileTab='history'">История</button>
                         </div>
 
                         <div v-show="profileTab==='analytics'" class="analytics-view">
@@ -158,13 +159,13 @@
                                     <canvas id="winRateChart"></canvas>
                                 </div>
                                 <div class="stats-text-box">
-                                    <p>Винрейт: <strong>{{ analyticsData?.win_rate?.toFixed(1) || 0 }}%</strong></p>
-                                    <p>Точность ответов: <strong>{{ analyticsData?.correct_answers?.toFixed(1) || 0 }}%</strong></p>
-                                    <p>Ср. время решения: <strong>{{ analyticsData?.avg_solving_time || 0 }} сек</strong></p>
+                                    <p>WIN RATE: <span class="accent">{{ analyticsData?.win_rate?.toFixed(1) || 0 }}%</span></p>
+                                    <p>Правильных ответов: <span class="accent">{{ analyticsData?.correct_answers?.toFixed(1) || 0 }}%</span></p>
+                                    <p>Среднее время: <span class="accent">{{ analyticsData?.avg_solving_time || 0 }}s</span></p>
                                 </div>
                             </div>
                             <div class="chart-box full-width">
-                                <h4>Темы тренировок</h4>
+                                <h4>TOPIC MASTERY</h4>
                                 <canvas id="topicsChart"></canvas>
                             </div>
                         </div>
@@ -181,12 +182,12 @@
                                     <div class="match-score">{{ match.p1_score }} : {{ match.p2_score }}</div>
                                     <div :class="['match-result', getMyResult(match)]">{{ getResultText(match) }}</div>
                                 </div>
-                                <div v-if="history.length === 0" class="no-data">История пуста</div>
+                                <div v-if="history.length === 0" class="no-data">Историй матчей пустая</div>
                             </div>
                             <div class="pagination">
-                                <button @click="historyPage--" :disabled="historyPage === 0"><i class="fa-solid fa-chevron-left"></i></button>
-                                <span>{{ historyPage + 1 }}</span>
-                                <button @click="historyPage++" :disabled="(historyPage + 1) * 5 >= history.length"><i class="fa-solid fa-chevron-right"></i></button>
+                                <button class="cyber-btn sm" @click="historyPage--" :disabled="historyPage === 0">&lt;</button>
+                                <span>PAGE {{ historyPage + 1 }}</span>
+                                <button class="cyber-btn sm" @click="historyPage++" :disabled="(historyPage + 1) * 5 >= history.length">&gt;</button>
                             </div>
                         </div>
                     </div>
@@ -195,21 +196,20 @@
 
             <!-- ТРЕНИРОВКА: Выбор темы -->
             <div v-if="state === 'topic_select'" class="screen-setup">
-                <button class="back-btn" @click="goTo('menu')"><i class="fa-solid fa-arrow-left"></i></button>
-                <h2>НАСТРОЙКА ТРЕНИРОВКИ</h2>
+                <button class="back-btn" @click="goTo('menu')"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+                <h2 class="section-title">Настройки тренировки</h2>
 
-                <div class="setup-group">
-                    <label>Предмет:</label>
+                <div class="setup-group cyber-border">
+                    <label>Выбор модулей:</label>
                     <div class="subject-toggles">
-                        <button :class="{active: subject==='python'}" @click="subject='python'">Python</button>
-                        <button :class="{active: subject==='math'}" @click="subject='math'">Математика</button>
+                        <button class="cyber-btn" :class="{active: subject==='python'}" @click="subject='python'">PYTHON</button>
+                        <button class="cyber-btn" :class="{active: subject==='Математика'}" @click="subject='Математика'">Математика</button>
                     </div>
                 </div>
 
-                <div class="setup-group">
-                    <label>Сложность:</label>
+                <div class="setup-group cyber-border">
+                    <label>Сложность: <span class="accent">{{ selectedDifficulty }}/5</span></label>
                     <input type="range" min="1" max="5" v-model.number="selectedDifficulty" class="cyber-range">
-                    <div class="range-val">{{ selectedDifficulty }}/5</div>
                 </div>
 
                 <div class="topics-grid">
@@ -219,24 +219,44 @@
                 </div>
             </div>
 
-            <!-- ТРЕНИРОВКА / PVP: Решение задачи -->
-            <div v-if="state === 'training_solve' || state === 'playing'" class="screen-game">
-                <div class="game-header">
-                    <button v-if="state === 'training_solve'" class="back-btn" @click="goTo('topic_select')">Выход</button>
-                    <div v-if="state === 'playing'" class="pvp-score-board">
-                        <div class="p-score me">{{ myScore }}</div>
-                        <div class="timer" :class="{danger: timeLeft < 10}">{{ timeLeft }}</div>
-                        <div class="p-score enemy">{{ enemyScore }}</div>
+            <!-- PVP: Настройка (ВЫБОР ПРЕДМЕТА) -->
+            <div v-if="state === 'pvp_setup'" class="screen-setup">
+                <button class="back-btn" @click="goTo('menu')"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+                <h2 class="section-title glitch" data-text="PVP_PROTOCOL">Предмет</h2>
+
+                <div class="setup-group cyber-border">
+                    <label>SELECT BATTLEFIELD:</label>
+                    <div class="subject-toggles">
+                        <button class="cyber-btn red-glow" :class="{active: subject==='python'}" @click="subject='python'">PYTHON</button>
+                        <button class="cyber-btn red-glow" :class="{active: subject==='Математика'}" @click="subject='Математика'">Математика</button>
                     </div>
                 </div>
 
-                <div class="task-card">
-                    <div class="task-meta">
-                        <span class="difficulty">Сложность: {{ activeTask?.difficulty || task?.difficulty }}</span>
-                        <span class="task-type">{{ (activeTask?.task_type || task?.task_type) === 'choice' ? 'Тест' : 'Ввод' }}</span>
+                <div style="text-align: center; margin-top: 50px;">
+                    <button class="cyber-btn lg red-glow" @click="startPvP">
+                        <i class="fa-solid fa-satellite-dish"></i> Найти игру
+                    </button>
+                </div>
+            </div>
+
+            <!-- ТРЕНИРОВКА / PVP: Решение задачи -->
+            <div v-if="state === 'training_solve' || state === 'playing'" class="screen-game">
+                <div class="game-header">
+                    <button v-if="state === 'training_solve'" class="back-btn" @click="goTo('topic_select')">Назад</button>
+                    <div v-if="state === 'playing'" class="pvp-score-board cyber-border">
+                        <div class="p-score me">ME: {{ myScore }}</div>
+                        <div class="timer" :class="{danger: timeLeft < 10}">{{ timeLeft }}</div>
+                        <div class="p-score enemy">OP: {{ enemyScore }}</div>
                     </div>
-                    <h3>{{ activeTask?.title || task?.title }}</h3>
-                    <p class="task-desc" v-html="renderMath(activeTask?.description || task?.description)"></p>
+                </div>
+
+                <div class="task-card cyber-border">
+                    <div class="task-meta">
+                        <span class="task-diff">Сложность: {{ activeTask?.difficulty || task?.difficulty }}</span>
+                        <span class="task-type">{{ (activeTask?.task_type || task?.task_type) === 'choice' ? 'MULTIPLE_CHOICE' : 'INPUT_TEXT' }}</span>
+                    </div>
+                    <h3 class="task-title">{{ activeTask?.title || task?.title }}</h3>
+                    <div class="task-desc" v-html="(activeTask?.description || task?.description)"></div>
 
                     <!-- Варианты ответа -->
                     <div v-if="(activeTask?.task_type || task?.task_type) === 'choice'" class="options-grid">
@@ -252,28 +272,30 @@
                     <div v-else class="text-answer-box">
                         <input type="text"
                                v-model="currentAnswerInput"
-                               placeholder="Ваш ответ..."
+                               placeholder="Введите ответ..."
                                @keyup.enter="handleAnswer(currentAnswerInput)"
                                :disabled="solveResult !== null || answerSent">
-                        <button class="cyber-btn" @click="handleAnswer(currentAnswerInput)">ОТПРАВИТЬ</button>
+                        <button class="cyber-btn" @click="handleAnswer(currentAnswerInput)">Отправить</button>
                     </div>
 
                     <!-- Результат (Тренировка) -->
                     <div v-if="solveResult" :class="['result-msg', solveResult]">
-                        {{ solveResult === 'correct' ? 'ВЕРНО!' : 'НЕВЕРНО' }}
-                        <button v-if="solveResult === 'correct'" @click="goTo('topic_select')" class="next-btn">Далее</button>
+                        {{ solveResult === 'correct' ? 'CORRECT' : 'INCORRECT' }}
+                        <button v-if="solveResult === 'correct'" @click="goTo('topic_select')" class="cyber-btn sm">NEXT &gt;</button>
                     </div>
 
                     <!-- Результат раунда (PVP) -->
                     <div v-if="roundFinished" class="round-overlay">
-                        <div class="round-modal">
-                            <h3>Раунд завершен</h3>
+                        <div class="round-modal cyber-border">
+                            <h3>ROUND_COMPLETE</h3>
                             <div class="round-res-grid">
-                                <div :class="roundResult.you">ВЫ</div>
-                                <div :class="roundResult.enemy">СОПЕРНИК</div>
+                                <div :class="roundResult.you">YOU</div>
+                                <div :class="roundResult.enemy">OPPONENT</div>
                             </div>
-                            <p>Правильный ответ: {{ roundResult.correct }}</p>
-                            <p>Следующий раунд через: {{ nextRoundTimer.toFixed(1) }}</p>
+                            <p class="correct-text">ANSWER: {{ roundResult.correct }}</p>
+                            <div class="loading-bar">
+                                <div class="bar-fill" :style="{width: (nextRoundTimer/4)*100 + '%'}"></div>
+                            </div>
                         </div>
                     </div>
 
@@ -282,8 +304,8 @@
                         <div v-for="(h, idx) in revealedHints" :key="idx" class="hint-bubble">{{ h }}</div>
                         <button v-if="revealedHints.length < (activeTask?.hints_available || 0)"
                                 @click="useHint"
-                                class="hint-btn">
-                            <i class="fa-regular fa-lightbulb"></i> Взять подсказку
+                                class="cyber-btn sm hint-btn">
+                            <i class="fa-regular fa-lightbulb"></i> HINT
                         </button>
                     </div>
                 </div>
@@ -292,8 +314,8 @@
             <!-- PVP: Поиск -->
             <div v-if="state === 'searching'" class="screen-centered">
                 <div class="loader-ring"></div>
-                <h2>Поиск соперника...</h2>
-                <button class="cyber-btn outline" @click="reset">ОТМЕНА</button>
+                <h2 class="glitch" data-text="SCANNING...">SCANNING...</h2>
+                <button class="cyber-btn red-glow" @click="reset">CANCEL</button>
             </div>
 
              <!-- PVP: VS Экран -->
@@ -304,7 +326,7 @@
                     <p>{{ userStats.rating }} MMR</p>
                 </div>
                 <div class="vs-center">
-                    <h1>VS</h1>
+                    <h1 class="glitch" data-text="VERSUS">VERSUS</h1>
                     <div class="countdown">{{ vsTimer }}</div>
                 </div>
                 <div class="vs-player enemy">
@@ -316,14 +338,14 @@
 
             <!-- PVP: Финал -->
             <div v-if="state === 'finished'" class="screen-centered">
-                <h1 :class="finalData.result === 'win' ? 'text-win' : 'text-lose'">
-                    {{ finalData.result === 'win' ? 'ПОБЕДА' : finalData.result === 'draw' ? 'НИЧЬЯ' : 'ПОРАЖЕНИЕ' }}
+                <h1 :class="['final-title', finalData.result === 'win' ? 'text-win' : 'text-lose']">
+                    {{ finalData.result === 'win' ? 'VICTORY' : finalData.result === 'draw' ? 'DRAW' : 'DEFEAT' }}
                 </h1>
-                <div class="final-score">
-                    {{ finalData.my_score }} : {{ finalData.enemy_score }}
+                <div class="final-score cyber-border">
+                    {{ finalData.my_score }} - {{ finalData.enemy_score }}
                 </div>
-                <p>Новый рейтинг: {{ finalData.new_rating }}</p>
-                <button class="cyber-btn lg" @click="goTo('menu')">В МЕНЮ</button>
+                <p>RATING UPDATE: <span class="accent">{{ finalData.new_rating }}</span></p>
+                <button class="cyber-btn lg" @click="goTo('menu')">RETURN_TO_BASE</button>
             </div>
 
             <!-- Загрузка AI -->
@@ -331,7 +353,7 @@
                 <div class="ai-loader">
                     <span></span><span></span><span></span>
                 </div>
-                <h3>Нейросеть генерирует задачу...</h3>
+                <h3>AI GENERATING...</h3>
             </div>
 
         </main>
@@ -339,9 +361,9 @@
         <!-- Нижняя шапка -->
         <footer class="bottom-bar">
             <a href="https://t.me/whosgodlike" target="_blank" class="support-link">
-                <i class="fa-regular fa-life-ring"></i> Поддержка
+                <i class="fa-regular fa-life-ring"></i> SUPPORT_CHANNEL
             </a>
-            <span class="copyright">© 2026 OlimpicOS System</span>
+            <span class="copyright">OlimpicOS</span>
         </footer>
     </div>
 </div>
