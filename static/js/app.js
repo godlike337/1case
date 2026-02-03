@@ -10,7 +10,7 @@ const app = createApp({
 
             // Данные пользователя
             authForm: { username: '', password: '', email: '', grade: 9 },
-            userStats: { username: 'GUEST', level: 1, xp: 0, rating: 1000, wins: 0, matches_played: 0 ,grade: 9 },
+            userStats: { username: 'GUEST', level: 1, xp: 0, rating: 1000, wins: 0, losses: 0, grade: 9 },
 
             // Навигация
             profileTab: 'analytics',
@@ -56,15 +56,12 @@ const app = createApp({
         }
     },
     async mounted() {
-        // Логика восстановления сессии при F5
         const currentPath = window.location.pathname.replace('/', '');
 
         if (this.token) {
             try {
-                // Сначала пробуем получить данные, если токен протух - логаут
                 this.userStats = await Api.getUserStats(this.token);
 
-                // Если путь пустой или логин - кидаем в меню
                 if (!currentPath || currentPath === 'login') {
                     this.goTo('menu');
                 } else {
@@ -75,7 +72,6 @@ const app = createApp({
                 this.logout();
             }
         } else {
-            // Нет токена - на логин
             this.goTo(currentPath === 'register' ? 'register' : 'login');
 
         }
@@ -90,6 +86,18 @@ const app = createApp({
     },
     methods: {
         goTo(newState) {
+            if (['menu', 'topic_select', 'pvp_setup'].includes(newState)) {
+                this.activeTask = null;
+                this.task = {};
+                this.currentAnswerInput = '';
+                this.solveResult = null;
+                this.revealedHints = [];
+                this.roundFinished = false;
+                this.answerSent = false;
+                this.timeLeft = 0;
+            }
+
+            // Переходы
             this.state = newState;
             const path = newState === 'menu' ? '/' : `/${newState}`;
             if (location.pathname !== path) {
@@ -98,8 +106,7 @@ const app = createApp({
 
             if (newState === 'profile') this.loadProfileData();
 
-            // Если ушли с поиска или игры - рвем сокет
-            if (['menu', 'topic_select', 'pvp_setup'].includes(newState)) {
+            if (['menu', 'topic_select', 'pvp_setup', 'profile'].includes(newState)) {
                 if (this.ws) {
                     this.ws.close();
                     this.ws = null;
@@ -109,7 +116,7 @@ const app = createApp({
 
         triggerMathRender() {
             nextTick(() => {
-                const elem = document.querySelector('.task-desc, .hint-bubble'); // Класс контейнера описания задачи
+                const elem = document.querySelector('.task-desc, .hint-bubble');
                 if (elem && window.renderMathInElement) {
                     window.renderMathInElement(elem, {
                         delimiters: [
@@ -123,7 +130,7 @@ const app = createApp({
                 }
             });
         },
-        // --- AUTH ---
+        // Авторизация
         async login() {
             try {
                 const d = await Api.loginUser(this.authForm.username, this.authForm.password);
@@ -146,7 +153,7 @@ const app = createApp({
             this.goTo('login');
         },
 
-        // --- PROFILE ---
+        // Профиль
         async loadProfileData() {
             if (!this.token) return;
             try {
@@ -160,26 +167,26 @@ const app = createApp({
                 this.renderCharts();
             } catch (e) { console.error(e); }
         },
+        // Графики
         renderCharts() {
             if(this.charts.winRate) this.charts.winRate.destroy();
             if(this.charts.topics) this.charts.topics.destroy();
             const ad = this.analyticsData;
             if (!ad) return;
 
-            // Настройки цветов для графиков под тему
             Chart.defaults.color = '#889';
             Chart.defaults.borderColor = '#334';
 
             const ctx1 = document.getElementById('winRateChart');
             if (ctx1) {
-                const losses = ad.total_matches - this.userStats.wins;
+                const draws = ad.total_matches - (this.userStats.wins + this.userStats.losses)
                 this.charts.winRate = new Chart(ctx1, {
                     type: 'doughnut',
                     data: {
-                        labels: ['VICTORY', 'DEFEAT'],
+                        labels: ['Победы', 'Пройгрышы', 'Ничьи'],
                         datasets: [{
-                            data: [this.userStats.wins, losses > 0 ? losses : 0],
-                            backgroundColor: ['#00f3ff', '#ff0055'],
+                            data: [this.userStats.wins, this.userStats.losses , draws],
+                            backgroundColor: ['#00f3ff', '#ff0055', '#ffee00'],
                             borderWidth: 0
                         }]
                     },
@@ -196,7 +203,7 @@ const app = createApp({
                     data: {
                         labels: topics,
                         datasets: [{
-                            label: 'SOLVED',
+                            label: 'Решено',
                             data: counts,
                             backgroundColor: 'rgba(0, 243, 255, 0.2)',
                             borderColor: '#00f3ff',
@@ -210,6 +217,8 @@ const app = createApp({
                 });
             }
         },
+
+
         formatDate(d) { return new Date(d).toLocaleDateString(); },
         getMyResult(m) {
             const me = this.userStats.username;
@@ -226,7 +235,7 @@ const app = createApp({
             return r === 'win' ? 'WIN' : r === 'lose' ? 'LOSE' : 'DRAW';
         },
 
-        // --- TRAINING ---
+        // Тренировки
         async selectTopic(topicId) {
             this.state = 'loading_ai';
             try {
@@ -267,7 +276,7 @@ const app = createApp({
             } catch(e) {}
         },
 
-        // --- PVP SYSTEM ---
+        // PVP
         reset() {
             if(this.ws) this.ws.close();
             this.goTo('menu');
@@ -278,8 +287,7 @@ const app = createApp({
             this.myScore = 0; this.enemyScore = 0;
 
             const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-            const url = `${proto}://${location.host}/ws/pvp?subject=${this.subject}&token=${this.token}`;
-
+            const url = `${proto}://${location.host}/ws/pvp?subject=${this.subject}&token=${this.token}\\`;
             this.ws = new WebSocket(url);
 
             this.ws.onmessage = (e) => {
@@ -303,7 +311,6 @@ const app = createApp({
                     this.answerSent = false;
                     this.currentAnswerInput = '';
                     this.timeLeft = '∞';
-                    // Re-render math if needed
                     this.triggerMathRender();
                 } else if (d.type === 'pressure_timer') {
                     this.timeLeft = d.seconds;

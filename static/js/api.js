@@ -1,4 +1,3 @@
-// api.js
 const API_PREFIX = '';
 
 function getHeaders(token) {

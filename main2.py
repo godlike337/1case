@@ -3,16 +3,15 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import FileResponse
 from contextlib import asynccontextmanager
 
-from sqladmin import Admin, ModelView
+from sqladmin import Admin
 from database import engine, Base, get_db, new_session
 import auth
 import tasks
 import pvp
 import analytics
-from admin_panel import UserAdmin, TaskAdmin, MatchHistoryAdmin
+from admin_panel import UserAdmin, TaskAdmin, MatchHistoryAdmin, AchievementAdmin
 from starlette.middleware.sessions import SessionMiddleware
 from admin_auth import AdminAuth
-from models import Achievement
 
 
 @asynccontextmanager
@@ -30,17 +29,10 @@ async def lifespan(app: FastAPI):
         await auth.create_initial_admin_user(db_session)
         await auth.create_initial_achievements(db_session)
         break
-    print("--- СЕРВЕР ЗАПУЩЕН, БАЗА ГОТОВА ---")
     yield
 
-class AchievementAdmin(ModelView, model=Achievement):
-    name = "Достижение"
-    name_plural = "Достижения"
-    icon = "fa-solid fa-trophy"
-    column_list = [Achievement.name, Achievement.description, Achievement.icon]
 
-app = FastAPI(lifespan=lifespan, title="Платформа для олимпиад")
-
+app = FastAPI(lifespan=lifespan, title="docs")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/")
@@ -71,3 +63,10 @@ app.include_router(auth.router)
 app.include_router(tasks.router)
 app.include_router(pvp.router)
 app.include_router(analytics.router)
+
+@app.get("/{full_path:path}")
+async def catch_all(full_path: str):
+    if full_path.startswith("static") or full_path.startswith("api"):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404)
+    return FileResponse("static/index.html")

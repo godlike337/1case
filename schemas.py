@@ -1,7 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional
 from datetime import datetime
-from typing import Dict
 
 class AchievementResponse(BaseModel):
     name: str
@@ -45,7 +44,6 @@ class Token(BaseModel):
 class TaskCreate(BaseModel):
     title: str
     description: str
-    grade: int
     difficulty: int
     correct_answer: str
     subject: str
@@ -55,7 +53,6 @@ class TaskResponse(BaseModel):
     id: int
     subject: str
     topic: str
-    grade: int
     difficulty: int
     title: str
     description: str
@@ -89,8 +86,8 @@ class StatsResponse(BaseModel):
     total_matches: int
     win_rate: float
     total_solved_training: int
-    subject_stats: Dict[str, dict]
-    correct_answers: int
+    subject_stats: dict[str, dict[str, int]]
+    correct_answers: float
     avg_solving_time: float
 
 class MatchHistoryResponse(BaseModel):

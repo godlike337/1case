@@ -65,7 +65,7 @@ async def create_initial_admin_user(db: AsyncSession):
 
     if not admin_user:
         hashed_password = get_password_hash(ADMIN_PASSWORD)
-        new_admin = User(username=ADMIN_USERNAME, password=hashed_password, role="admin")
+        new_admin = User(username=ADMIN_USERNAME, grade=9, password=hashed_password, role="admin")
         db.add(new_admin)
         await db.commit()
         await db.refresh(new_admin)

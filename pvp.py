@@ -154,8 +154,12 @@ async def run_pvp_game(id1: int, id2: int, subject: str):
         async with new_session() as session:
             res = await session.execute(select(User).where(User.id.in_([id1, id2])))
             u_map = {u.id: u for u in res.scalars().all()}
-            name1 = u_map[id1].username if u_map.get(id1) else "Player 1"
-            name2 = u_map[id2].username if u_map.get(id2) else "Player 2"
+            user1 = u_map.get(id1)
+            user2 = u_map.get(id2)
+            name1 = user1.username if user1 else "Player 1"
+            name2 = user2.username if user2 else "Player 2"
+            rating1 = user1.rating if user1 else 1000
+            rating2 = user2.rating if user2 else 1000
 
             t_res = await session.execute(select(Task).where(Task.subject == subject))
             all_tasks = t_res.scalars().all()
@@ -169,9 +173,9 @@ async def run_pvp_game(id1: int, id2: int, subject: str):
         count = min(len(all_tasks), ROUNDS_COUNT)
         game_tasks = random.sample(all_tasks, k=count)
 
-        if not await safe_send(ws1, {"type": "match_found", "opponent": name2, "time": 5}):
+        if not await safe_send(ws1, {"type": "match_found", "opponent": name2, "rating": rating2, "time": 5}):
             disconnected_id = id1
-        elif not await safe_send(ws2, {"type": "match_found", "opponent": name1, "time": 5}):
+        elif not await safe_send(ws2, {"type": "match_found", "opponent": name1, "rating": rating1, "time": 5}):
             disconnected_id = id2
 
         if not disconnected_id:

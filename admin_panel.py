@@ -1,6 +1,7 @@
 from sqladmin import ModelView
 from models import User, Task, MatchHistory
 from auth import get_password_hash
+from models import Achievement
 
 
 
@@ -43,3 +44,9 @@ class MatchHistoryAdmin(ModelView, model=MatchHistory):
     can_create = False
     can_edit = False
     can_delete = True
+
+class AchievementAdmin(ModelView, model=Achievement):
+    name = "Достижение"
+    name_plural = "Достижения"
+    icon = "fa-solid fa-trophy"
+    column_list = [Achievement.name, Achievement.description, Achievement.icon]
