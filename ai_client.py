@@ -9,7 +9,7 @@ from google.genai import types
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("AI_Client")
 
-GOOGLE_API_KEY = "AIzaSyDsj6b818_aNRxE75GH4eULx4U245Wm_HA"
+KEY = "AIzaSyDIVY8DnwtnV8by1fk5uGc5K1myu4DEBlM"
 
 
 class AI_Task_Schema(BaseModel):
@@ -24,7 +24,7 @@ class AI_Task_Schema(BaseModel):
 
 class AIService:
     def __init__(self):
-        self.client = genai.Client(api_key=GOOGLE_API_KEY)
+        self.client = genai.Client(api_key=KEY)
 
     async def generate_task(self, subject: str, topic: str, grade: int, difficulty: int) -> Optional[AI_Task_Schema]:
         prompt = f"""
